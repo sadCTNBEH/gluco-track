@@ -12,6 +12,8 @@ import {
   AlertTriangle,
   Activity,
   FlaskConical,
+  Sparkles,
+  Copy,
 } from 'lucide-react';
 import { Modal } from './ui/Modal';
 import { Button } from './ui/Button';
@@ -25,6 +27,7 @@ interface SettingsModalProps {
   onImportData: (imported: DiaryEntry[]) => void;
   onOpenExcelImport: () => void;
   onClearAll: () => void;
+  onDeduplicate?: () => Promise<void> | void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -36,6 +39,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onImportData,
   onOpenExcelImport,
   onClearAll,
+  onDeduplicate,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [exportingXlsx, setExportingXlsx] = useState(false);
@@ -469,6 +473,38 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             />
           </div>
         </div>
+
+        {/* Дедупликация повторов */}
+        {onDeduplicate && (
+          <div className="space-y-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+            <div className="flex items-center justify-between">
+              <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                <Copy className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                Очистка дубликатов
+              </h4>
+              <span className="text-[10px] text-slate-400">Объединение повторов на одно время</span>
+            </div>
+            <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-medium text-slate-700 dark:text-slate-300">Найти и объединить дублирующиеся записи</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Сохраняет наиболее полные данные по сахару, дозам и заметкам</p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  await onDeduplicate();
+                  alert('Дубликаты успешно объединены и удалены!');
+                }}
+                className="whitespace-nowrap shrink-0 border-teal-300 dark:border-teal-700 hover:bg-teal-50 dark:hover:bg-teal-950/40 text-teal-700 dark:text-teal-300 flex items-center gap-1.5"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Удалить дубликаты</span>
+              </Button>
+            </div>
+          </div>
+        )}
 
         {/* Очистка данных с подтверждением */}
         <div className="space-y-3 pt-4 border-t border-slate-100 dark:border-slate-800">

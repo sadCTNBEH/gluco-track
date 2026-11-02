@@ -6,6 +6,7 @@ data/
 backups/
 *.key
 *.enc
+test_sandbox_*
 .DS_Store
 *.log
 .env

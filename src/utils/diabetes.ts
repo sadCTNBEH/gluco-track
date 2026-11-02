@@ -567,3 +567,66 @@ export function exportEntriesToCSV(entries: DiaryEntry[]): string {
   // Добавляем UTF-8 BOM (\uFEFF) для корректного открытия русских символов в Excel без искажения кодировки
   return '\uFEFF' + [headerRow, ...rows].join('\r\n');
 }
+
+/**
+ * Умная дедупликация записей дневника диабета.
+ * Находит записи с одинаковым ID или с одинаковым временем события (date + time),
+ * объединяет клинические данные (глюкоза, инсулины, ХЕ, заметки) без потери информации
+ * и удаляет полные дубликаты.
+ */
+export function deduplicateEntries(entries: DiaryEntry[]): DiaryEntry[] {
+  if (!Array.isArray(entries) || entries.length === 0) return [];
+
+  const idMap = new Map<string, DiaryEntry>();
+  const dateTimeMap = new Map<string, DiaryEntry>();
+
+  for (const entry of entries) {
+    if (!entry || !entry.date || !entry.time) continue;
+
+    // 1. Проверяем по ID
+    if (entry.id && idMap.has(entry.id)) {
+      const existing = idMap.get(entry.id)!;
+      mergeEntryData(existing, entry);
+      continue;
+    }
+
+    // 2. Проверяем по date + time
+    const dtKey = `${entry.date} ${entry.time}`;
+    if (dateTimeMap.has(dtKey)) {
+      const existing = dateTimeMap.get(dtKey)!;
+      // Если у записей совпадает сахар (или у одной он null) — это дубликат одного клинического события
+      if (
+        existing.glucose === null ||
+        entry.glucose === null ||
+        Math.abs((existing.glucose ?? 0) - (entry.glucose ?? 0)) < 0.05
+      ) {
+        mergeEntryData(existing, entry);
+        if (entry.id) idMap.set(entry.id, existing);
+        continue;
+      }
+    }
+
+    // Новая уникальная запись
+    const copy = { ...entry };
+    if (entry.id) idMap.set(entry.id, copy);
+    dateTimeMap.set(dtKey, copy);
+  }
+
+  // Сортировка: по дате убыванию, по времени возрастанию
+  return Array.from(dateTimeMap.values()).sort((a, b) => {
+    if (a.date !== b.date) return b.date.localeCompare(a.date);
+    return a.time.localeCompare(b.time);
+  });
+}
+
+function mergeEntryData(target: DiaryEntry, source: DiaryEntry) {
+  if (target.glucose == null && source.glucose != null) target.glucose = source.glucose;
+  if (target.carbs == null && source.carbs != null) target.carbs = source.carbs;
+  if (target.xe == null && source.xe != null) target.xe = source.xe;
+  if (target.rinFast == null && source.rinFast != null) target.rinFast = source.rinFast;
+  if (target.tresiba == null && source.tresiba != null) target.tresiba = source.tresiba;
+  if (target.calories == null && source.calories != null) target.calories = source.calories;
+  if ((!target.notes || target.notes.trim() === '') && source.notes) target.notes = source.notes;
+  if ((!target.tag || target.tag === 'other') && source.tag && source.tag !== 'other') target.tag = source.tag;
+  if (!target.createdAt && source.createdAt) target.createdAt = source.createdAt;
+}

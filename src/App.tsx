@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { DiaryEntry, UserSettings } from './types/diabetes';
-import { DEFAULT_SETTINGS, calculateMonthlyStats } from './utils/diabetes';
+import { DEFAULT_SETTINGS, calculateMonthlyStats, deduplicateEntries } from './utils/diabetes';
 import { Header, ActiveTab, ViewMode } from './components/Header';
 import { DiaryTable } from './components/DiaryTable';
 import { MobileCardView } from './components/MobileCardView';
@@ -119,17 +119,39 @@ export default function App() {
         setUserCachedSettings(targetUserId, mergedSettings);
       }
 
-      // 2. Серверные записи — источник истины
-      const validEntries = Array.isArray(serverEntries) ? serverEntries : [];
+      // 2. Серверные записи — источник истины (с автодедупликацией)
+      const rawEntries = Array.isArray(serverEntries) ? serverEntries : [];
+      const validEntries = deduplicateEntries(rawEntries);
       setEntries(validEntries);
       setUserCachedEntries(targetUserId, validEntries);
 
-      // 3. Проверка наличия немигрированного старого локального кэша (без автоимпорта!)
+      // Фоновая дедупликация на сервере при наличии повторов
+      if (rawEntries.length > validEntries.length) {
+        api.deduplicateEntries().catch(() => {});
+      }
+
+      // 3. Проверка наличия немигрированного старого локального кэша
       const unmigrated = getLegacyUnmigratedEntries();
-      if (unmigrated.length > 0) {
-        setLegacyEntriesToMigrate(unmigrated);
+      // Фильтруем: берем только те записи, которых реально НЕТ на сервере
+      const newToMigrate = unmigrated.filter((legacy) => {
+        return !validEntries.some(
+          (server) =>
+            (legacy.id && server.id && legacy.id === server.id) ||
+            (legacy.date === server.date &&
+              legacy.time === server.time &&
+              (legacy.glucose == null ||
+                server.glucose == null ||
+                Math.abs((legacy.glucose ?? 0) - (server.glucose ?? 0)) < 0.05))
+        );
+      });
+
+      if (newToMigrate.length > 0) {
+        setLegacyEntriesToMigrate(newToMigrate);
         setLegacySettingsToMigrate(getLegacyUnmigratedSettings());
         setLegacyMigrationOpen(true);
+      } else if (unmigrated.length > 0) {
+        // Все старые записи уже есть на сервере — очищаем старый ключ без модалки
+        cleanupLegacyStorage();
       }
     } catch (err) {
       // Защита от race condition
@@ -280,7 +302,7 @@ export default function App() {
   const handleConfirmLegacyMigration = async () => {
     if (!user || legacyEntriesToMigrate.length === 0) return;
     const toMigrate = [...legacyEntriesToMigrate];
-    const updated = [...toMigrate, ...entries];
+    const updated = deduplicateEntries([...entries, ...toMigrate]);
     setEntries(updated);
     if (user.id) {
       setUserCachedEntries(user.id, updated);
@@ -290,8 +312,20 @@ export default function App() {
     setLegacySettingsToMigrate(null);
     try {
       await api.importEntries(toMigrate, false);
+      if (user) await loadUserData(user);
     } catch (err) {
       console.error('Ошибка импорта мигрированных записей на сервер:', err);
+    }
+  };
+
+  // Ручная или фоновая дедупликация
+  const handleDeduplicate = async () => {
+    try {
+      await api.deduplicateEntries();
+      if (user) await loadUserData(user);
+    } catch (err) {
+      console.error('Ошибка дедупликации:', err);
+      setEntries((prev) => deduplicateEntries(prev));
     }
   };
 
@@ -515,6 +549,7 @@ export default function App() {
         }}
         onOpenExcelImport={() => setIsExcelModalOpen(true)}
         onClearAll={handleClearAll}
+        onDeduplicate={handleDeduplicate}
       />
 
       {/* Модальное окно импорта из Excel */}

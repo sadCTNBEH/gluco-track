@@ -136,6 +136,12 @@ export const api = {
     });
   },
 
+  async deduplicateEntries(): Promise<{ ok: boolean; removedCount: number }> {
+    return request<{ ok: boolean; removedCount: number }>('/api/entries/deduplicate', {
+      method: 'POST',
+    });
+  },
+
   // Настройки
   async getSettings(): Promise<UserSettings> {
     return request<UserSettings>('/api/settings');

@@ -11,6 +11,7 @@ import {
   unescapeFormulaInjection,
   formatCsvCell,
   exportEntriesToCSV,
+  deduplicateEntries,
 } from './diabetes';
 import { DiaryEntry } from '../types/diabetes';
 
@@ -570,4 +571,77 @@ test('SEC-03: Совместимость экспорта в CSV и послед
   assert.equal(importResult.entries[2].time, '19:00');
   assert.equal(importResult.entries[2].glucose, 9.4);
   assert.equal(importResult.entries[2].notes, '=HYPERLINK("http://safe.org"; "Тестовая ссылка")', 'Текст формулы безопасно сохранен и восстановлен');
+});
+
+test('deduplicateEntries: объединяет и удаляет полные и временные дубликаты записей', () => {
+  const duplicateList: DiaryEntry[] = [
+    {
+      id: 'uuid-1',
+      date: '2026-11-02',
+      time: '12:00',
+      glucose: 5.6,
+      carbs: null,
+      xe: null,
+      rinFast: null,
+      tresiba: null,
+      calories: null,
+      notes: '',
+      createdAt: 100,
+    },
+    {
+      id: 'uuid-2',
+      date: '2026-11-02',
+      time: '12:00',
+      glucose: 5.6,
+      carbs: 48,
+      xe: 4.0,
+      rinFast: 4,
+      tresiba: null,
+      calories: 320,
+      notes: 'Обед',
+      tag: 'lunch',
+      createdAt: 200,
+    },
+    {
+      id: 'uuid-1', // точный дубликат по ID
+      date: '2026-11-02',
+      time: '12:00',
+      glucose: 5.6,
+      carbs: null,
+      xe: null,
+      rinFast: null,
+      tresiba: null,
+      calories: null,
+      notes: '',
+      createdAt: 100,
+    },
+    {
+      id: 'uuid-3',
+      date: '2026-11-02',
+      time: '18:00',
+      glucose: 7.2,
+      carbs: null,
+      xe: null,
+      rinFast: null,
+      tresiba: null,
+      calories: null,
+      notes: 'Ужин',
+      createdAt: 300,
+    },
+  ];
+
+  const deduped = deduplicateEntries(duplicateList);
+  assert.equal(deduped.length, 2, 'Из 4 записей с дубликатами должно остаться ровно 2 уникальные');
+
+  const lunch = deduped.find((e) => e.time === '12:00');
+  assert.ok(lunch);
+  assert.equal(lunch.glucose, 5.6);
+  assert.equal(lunch.carbs, 48, 'Недостающие углеводы должны быть объединены');
+  assert.equal(lunch.rinFast, 4, 'Инсулин должен быть объединен');
+  assert.equal(lunch.notes, 'Обед', 'Заметка должна быть сохранена');
+  assert.equal(lunch.tag, 'lunch');
+
+  const dinner = deduped.find((e) => e.time === '18:00');
+  assert.ok(dinner);
+  assert.equal(dinner.glucose, 7.2);
 });

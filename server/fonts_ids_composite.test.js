@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
-import { app } from './index.js';
+import { app, deduplicateUserEntries } from './index.js';
 import { db, migrateEntriesTable } from './db.js';
 import { createSession } from './auth.js';
 
@@ -384,6 +384,65 @@ test('SEC-12: Атомарная и идемпотентная миграция 
     migrateEntriesTable(testDb);
     const checkIdempotency = testDb.prepare('SELECT COUNT(*) as cnt FROM entries').get();
     assert.equal(checkIdempotency.cnt, 3, 'Повторная миграция не должна изменять количество записей');
+  } finally {
+    testDb.close();
+  }
+});
+
+test('deduplicateUserEntries: находит и безопасно объединяет дубликаты в SQLite', () => {
+  const testDb = new DatabaseSync(':memory:');
+  try {
+    testDb.exec(`
+      CREATE TABLE entries (
+        id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        date TEXT NOT NULL,
+        time TEXT NOT NULL,
+        glucose REAL,
+        carbs REAL,
+        xe REAL,
+        rin_fast REAL,
+        tresiba REAL,
+        calories REAL,
+        notes TEXT,
+        tag TEXT,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (user_id, id)
+      );
+    `);
+
+    const now = Date.now();
+    const userId = 'usr_dedup_test';
+
+    // Вставляем 3 записи: 2 из них — дубликаты на 12:00
+    testDb.prepare(`
+      INSERT INTO entries (id, user_id, date, time, glucose, carbs, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run('e1', userId, '2026-11-02', '12:00', 5.5, null, now);
+
+    testDb.prepare(`
+      INSERT INTO entries (id, user_id, date, time, glucose, carbs, notes, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run('e2', userId, '2026-11-02', '12:00', 5.5, 45, 'Обед', now + 10);
+
+    testDb.prepare(`
+      INSERT INTO entries (id, user_id, date, time, glucose, carbs, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run('e3', userId, '2026-11-02', '18:00', 6.8, 50, now + 20);
+
+    const countBefore = testDb.prepare('SELECT COUNT(*) as cnt FROM entries WHERE user_id = ?').get(userId);
+    assert.equal(countBefore.cnt, 3);
+
+    const removed = deduplicateUserEntries(userId, testDb);
+    assert.equal(removed, 1, 'Ровно 1 дубликат должен быть удален');
+
+    const countAfter = testDb.prepare('SELECT COUNT(*) as cnt FROM entries WHERE user_id = ?').get(userId);
+    assert.equal(countAfter.cnt, 2, 'В базе должно остаться 2 уникальные записи');
+
+    const merged = testDb.prepare('SELECT * FROM entries WHERE user_id = ? AND time = ?').get(userId, '12:00');
+    assert.equal(merged.glucose, 5.5);
+    assert.equal(merged.carbs, 45, 'Углеводы из дубликата должны быть объединены в основную запись');
+    assert.equal(merged.notes, 'Обед', 'Заметка должна быть сохранена');
   } finally {
     testDb.close();
   }

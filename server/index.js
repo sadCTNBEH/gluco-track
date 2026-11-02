@@ -309,9 +309,89 @@ app.put('/api/settings', authMiddleware, validateBody(settingsSchema), (req, res
 
 // --- ЗАПИСИ ДНЕВНИКА (CRUD) ---
 
+/**
+ * Удаление дубликатов записей пользователя в SQLite с объединением данных.
+ * Находит записи с одинаковой датой и временем (и совпадающим сахаром),
+ * объединяет клинические данные в первую запись и удаляет лишние копии.
+ */
+export function deduplicateUserEntries(userId, database = db) {
+  if (!userId) return 0;
+
+  const rows = database.prepare(`
+    SELECT id, date, time, glucose, carbs, xe, rin_fast, tresiba, calories, notes, tag, created_at
+    FROM entries
+    WHERE user_id = ?
+    ORDER BY date DESC, time ASC, created_at ASC
+  `).all(userId);
+
+  if (rows.length === 0) return 0;
+
+  const seen = new Map();
+  const idsToDelete = [];
+
+  for (const row of rows) {
+    const dtKey = `${row.date} ${row.time}`;
+    if (!seen.has(dtKey)) {
+      seen.set(dtKey, { ...row });
+      continue;
+    }
+
+    const existing = seen.get(dtKey);
+    const isSameGlucose =
+      existing.glucose == null ||
+      row.glucose == null ||
+      Math.abs(existing.glucose - row.glucose) < 0.05;
+
+    if (isSameGlucose) {
+      // Это дубликат! Объединяем недостающие данные в сохраненную запись
+      let needsUpdate = false;
+      if (existing.glucose == null && row.glucose != null) { existing.glucose = row.glucose; needsUpdate = true; }
+      if (existing.carbs == null && row.carbs != null) { existing.carbs = row.carbs; needsUpdate = true; }
+      if (existing.xe == null && row.xe != null) { existing.xe = row.xe; needsUpdate = true; }
+      if (existing.rin_fast == null && row.rin_fast != null) { existing.rin_fast = row.rin_fast; needsUpdate = true; }
+      if (existing.tresiba == null && row.tresiba != null) { existing.tresiba = row.tresiba; needsUpdate = true; }
+      if (existing.calories == null && row.calories != null) { existing.calories = row.calories; needsUpdate = true; }
+      if ((!existing.notes || !existing.notes.trim()) && row.notes) { existing.notes = row.notes; needsUpdate = true; }
+      if ((!existing.tag || existing.tag === 'other') && row.tag && row.tag !== 'other') { existing.tag = row.tag; needsUpdate = true; }
+
+      if (needsUpdate) {
+        database.prepare(`
+          UPDATE entries
+          SET glucose = ?, carbs = ?, xe = ?, rin_fast = ?, tresiba = ?, calories = ?, notes = ?, tag = ?
+          WHERE user_id = ? AND id = ?
+        `).run(
+          existing.glucose, existing.carbs, existing.xe, existing.rin_fast, existing.tresiba,
+          existing.calories, existing.notes || '', existing.tag || 'other', userId, existing.id
+        );
+      }
+
+      idsToDelete.push(row.id);
+    }
+  }
+
+  if (idsToDelete.length > 0) {
+    const deleteStmt = database.prepare('DELETE FROM entries WHERE user_id = ? AND id = ?');
+    database.exec('BEGIN');
+    try {
+      for (const id of idsToDelete) {
+        deleteStmt.run(userId, id);
+      }
+      database.exec('COMMIT');
+    } catch (err) {
+      database.exec('ROLLBACK');
+      console.error('Ошибка удаления дубликатов в БД:', err);
+    }
+  }
+
+  return idsToDelete.length;
+}
+
 // Получить все записи
 app.get('/api/entries', authMiddleware, (req, res) => {
   try {
+    // Автоматическая фоновая дедупликация при получении списка записей
+    deduplicateUserEntries(req.user.id, db);
+
     const rows = db.prepare(`
       SELECT id, date, time, glucose, carbs, xe, rin_fast AS rinFast, tresiba, calories, notes, tag, created_at AS createdAt
       FROM entries
@@ -323,6 +403,17 @@ app.get('/api/entries', authMiddleware, (req, res) => {
   } catch (err) {
     console.error('Get entries error:', err);
     res.status(500).json({ error: 'Ошибка загрузки записей' });
+  }
+});
+
+// Явный вызов дедупликации записей
+app.post('/api/entries/deduplicate', authMiddleware, (req, res) => {
+  try {
+    const removedCount = deduplicateUserEntries(req.user.id, db);
+    res.json({ ok: true, removedCount });
+  } catch (err) {
+    console.error('Deduplicate error:', err);
+    res.status(500).json({ error: 'Ошибка удаления дубликатов' });
   }
 });
 
@@ -502,6 +593,10 @@ app.post('/api/entries/import', authMiddleware, (req, res) => {
       }
 
       const checkStmt = db.prepare('SELECT id FROM entries WHERE user_id = ? AND id = ?');
+      const checkDateTimeStmt = db.prepare(`
+        SELECT id, glucose FROM entries
+        WHERE user_id = ? AND date = ? AND time = ?
+      `);
       const checkOtherStmt = db.prepare('SELECT user_id FROM entries WHERE id = ?');
       const insertStmt = db.prepare(`
         INSERT INTO entries (id, user_id, date, time, glucose, carbs, xe, rin_fast, tresiba, calories, notes, tag, created_at)
@@ -518,48 +613,59 @@ app.post('/api/entries/import', authMiddleware, (req, res) => {
         let entryId = e.id;
         const createdAt = e.createdAt || Date.now();
 
-        if (entryId) {
-          const existing = checkStmt.get(req.user.id, entryId);
-          if (existing) {
-            // Собственная существующая запись: обновляем (дедупликация при повторном импорте, SEC-12)
-            updateStmt.run(
-              e.date,
-              e.time,
-              e.glucose ?? null,
-              e.carbs ?? null,
-              e.xe ?? null,
-              e.rinFast ?? null,
-              e.tresiba ?? null,
-              e.calories ?? null,
-              e.notes || '',
-              e.tag || 'other',
-              req.user.id,
-              entryId
-            );
-          } else {
-            // Защита от коллизии при импорте чужого ID: генерируем безопасный UUID (SEC-05, SEC-11)
+        // 1. Проверяем совпадение по ID
+        const existingById = entryId ? checkStmt.get(req.user.id, entryId) : null;
+        // 2. Проверяем совпадение по времени события (date + time) для предотвращения дубликатов
+        const existingByDateTime = checkDateTimeStmt.get(req.user.id, e.date, e.time);
+
+        if (existingById) {
+          // Обновляем запись по ID
+          updateStmt.run(
+            e.date,
+            e.time,
+            e.glucose ?? null,
+            e.carbs ?? null,
+            e.xe ?? null,
+            e.rinFast ?? null,
+            e.tresiba ?? null,
+            e.calories ?? null,
+            e.notes || '',
+            e.tag || 'other',
+            req.user.id,
+            entryId
+          );
+        } else if (
+          existingByDateTime &&
+          (existingByDateTime.glucose == null ||
+            e.glucose == null ||
+            Math.abs(existingByDateTime.glucose - e.glucose) < 0.05)
+        ) {
+          // Запись на это же время с совпадающим сахаром уже есть: объединяем в существующую (дедупликация)
+          updateStmt.run(
+            e.date,
+            e.time,
+            e.glucose ?? null,
+            e.carbs ?? null,
+            e.xe ?? null,
+            e.rinFast ?? null,
+            e.tresiba ?? null,
+            e.calories ?? null,
+            e.notes || '',
+            e.tag || 'other',
+            req.user.id,
+            existingByDateTime.id
+          );
+        } else {
+          // Новая запись: если ID чужой или отсутствует — генерируем новый UUID
+          if (entryId) {
             const existingOther = checkOtherStmt.get(entryId);
             if (existingOther && existingOther.user_id !== req.user.id) {
               entryId = crypto.randomUUID();
             }
-            insertStmt.run(
-              entryId,
-              req.user.id,
-              e.date,
-              e.time,
-              e.glucose ?? null,
-              e.carbs ?? null,
-              e.xe ?? null,
-              e.rinFast ?? null,
-              e.tresiba ?? null,
-              e.calories ?? null,
-              e.notes || '',
-              e.tag || 'other',
-              createdAt
-            );
+          } else {
+            entryId = crypto.randomUUID();
           }
-        } else {
-          entryId = crypto.randomUUID();
+
           insertStmt.run(
             entryId,
             req.user.id,
@@ -578,6 +684,9 @@ app.post('/api/entries/import', authMiddleware, (req, res) => {
         }
         imported++;
       }
+
+      // Дополнительная проверка на чистоту записей
+      deduplicateUserEntries(req.user.id, db);
 
       db.exec('COMMIT');
       res.json({ ok: true, importedCount: imported });
