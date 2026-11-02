@@ -1,6 +1,6 @@
 import readXlsxFile from 'read-excel-file/browser';
 import { DiaryEntry } from '../types/diabetes';
-import { calculateXE } from './diabetes';
+import { calculateXE, unescapeFormulaInjection } from './diabetes';
 
 export interface ExcelImportResult {
   entries: DiaryEntry[];
@@ -26,56 +26,61 @@ function normalizeHeader(val: unknown): string {
 export function parseCsvText(text: string): any[][] {
   // Убираем BOM, если есть
   const cleanText = text.replace(/^\uFEFF/, '');
-  const lines = cleanText.split(/\r?\n/);
-  if (lines.length === 0) return [];
+  if (!cleanText.trim()) return [];
 
-  // Определяем разделитель по первым 5 непустым строкам
-  let commaCount = 0;
-  let semiCount = 0;
-  let tabCount = 0;
-
-  for (let i = 0; i < Math.min(lines.length, 10); i++) {
-    const l = lines[i];
-    if (!l.trim()) continue;
-    commaCount += (l.match(/,/g) || []).length;
-    semiCount += (l.match(/;/g) || []).length;
-    tabCount += (l.match(/\t/g) || []).length;
-  }
+  // Определяем разделитель по первым строкам
+  const sample = cleanText.slice(0, 2000);
+  const commaCount = (sample.match(/,/g) || []).length;
+  const semiCount = (sample.match(/;/g) || []).length;
+  const tabCount = (sample.match(/\t/g) || []).length;
 
   let delimiter = ',';
-  if (semiCount > commaCount && semiCount > tabCount) {
+  if (semiCount >= commaCount && semiCount >= tabCount) {
     delimiter = ';';
   } else if (tabCount > commaCount && tabCount > semiCount) {
     delimiter = '\t';
   }
 
   const rows: any[][] = [];
+  let currentRow: string[] = [];
+  let currentField = '';
+  let inQuotes = false;
 
-  for (const line of lines) {
-    if (!line.trim()) continue;
+  for (let i = 0; i < cleanText.length; i++) {
+    const c = cleanText[i];
+    const next = cleanText[i + 1];
 
-    const row: string[] = [];
-    let inQuotes = false;
-    let field = '';
-
-    for (let i = 0; i < line.length; i++) {
-      const c = line[i];
-      if (c === '"') {
-        if (inQuotes && line[i + 1] === '"') {
-          field += '"';
-          i++;
-        } else {
-          inQuotes = !inQuotes;
-        }
-      } else if (c === delimiter && !inQuotes) {
-        row.push(field.trim());
-        field = '';
+    if (c === '"') {
+      if (inQuotes && next === '"') {
+        currentField += '"';
+        i++; // пропускаем экранированную кавычку
       } else {
-        field += c;
+        inQuotes = !inQuotes;
       }
+    } else if (c === delimiter && !inQuotes) {
+      currentRow.push(currentField.trim());
+      currentField = '';
+    } else if ((c === '\r' || c === '\n') && !inQuotes) {
+      if (c === '\r' && next === '\n') {
+        i++; // пропускаем \r\n
+      }
+      currentRow.push(currentField.trim());
+      currentField = '';
+      if (currentRow.some((f) => f.length > 0)) {
+        rows.push(currentRow);
+      }
+      currentRow = [];
+    } else {
+      currentField += c;
     }
-    row.push(field.trim());
-    rows.push(row);
+  }
+
+  // Финальное поле/строка
+  if (currentField.length > 0 || currentRow.length > 0) {
+    currentRow.push(currentField.trim());
+    if (currentRow.some((f) => f.length > 0)) {
+      rows.push(currentRow);
+    }
   }
 
   return rows;
@@ -398,8 +403,9 @@ export async function parseExcelDiary(file: File, xeRatio = 12): Promise<ExcelIm
     const rinFast = rinFastCol >= 0 ? parseNumberCell(row[rinFastCol]) : null;
     const tresiba = tresibaCol >= 0 ? parseNumberCell(row[tresibaCol]) : null;
     const calories = calCol >= 0 ? parseNumberCell(row[calCol]) : null;
-    const notes =
+    const rawNotes =
       notesCol >= 0 && row[notesCol] !== null && row[notesCol] !== undefined ? String(row[notesCol]).trim() : '';
+    const notes = unescapeFormulaInjection(rawNotes);
 
     // Если строка полностью пустая (нет ни сахара, ни еды, ни инсулина, ни заметок) — пропускаем
     if (
@@ -435,7 +441,7 @@ export async function parseExcelDiary(file: File, xeRatio = 12): Promise<ExcelIm
     }
 
     entries.push({
-      id: `imp-${Date.now()}-${r}-${Math.random().toString(36).slice(2, 6)}`,
+      id: crypto.randomUUID(), // Криптографически стойкий уникальный идентификатор (SEC-11)
       date: parsedDate,
       time: parsedTime,
       glucose,

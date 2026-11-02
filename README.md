@@ -73,13 +73,19 @@
 
 ### 🚀 Быстрый запуск на сервере через Docker (Порт 4999)
 
-#### Запуск / пересборка контейнера:
+#### Подготовка прав доступа и запуск контейнера (SEC-09):
 ```bash
 cd /opt/gluco-track
+
+# Обеспечение прав для непривилегированного пользователя node (UID 1000)
+mkdir -p ./data
+chown -R 1000:1000 ./data
+
+# Запуск / пересборка контейнера:
 docker compose up -d --build
 ```
 
-Приложение запустится в изолированном контейнере и будет принимать подключения на `127.0.0.1:4999`.
+Приложение запустится в изолированном контейнере от непривилегированного пользователя `node` (UID 1000) с защитой `no-new-privileges:true` и будет принимать подключения на `127.0.0.1:4999`.
 
 #### Остановка контейнера:
 ```bash
@@ -88,27 +94,56 @@ docker compose down
 
 ---
 
-### ⏰ Настройка ежедневного бэкапа в 00:00 по МСК (вне контейнера)
+### ⏰ Резервное копирование и восстановление (SEC-07)
 
-1. Сделайте скрипт исполняемым:
+#### Особенности и безопасность:
+- **Согласованность SQLite WAL**: используется SQLite Online Backup API (`sqlite3 .backup`), исключающий повреждение базы данных при активных транзакциях. Небезопасный `cp` полностью удален.
+- **Целостность данных**: перед публикацией каждого бэкапа выполняется строгая проверка `PRAGMA integrity_check`. Поврежденные снимки немедленно отклоняются.
+- **Версионирование и ротация**: снимки сохраняются в формате `glucotrack_backup_YYYYMMDD_HHMMSS.db` (или `.db.enc`). Автоматически хранятся последние 30 ежедневных копий.
+- **Защита прав доступа**: скрипт использует `umask 077`, ограничивая права на каталог бэкапов (`0700`) и файлы (`0600`).
+- **Шифрование (AES-256-CBC с PBKDF2)**: при наличии переменной `BACKUP_ENCRYPTION_KEY` или файла `BACKUP_ENCRYPTION_KEY_FILE` бэкапы автоматически шифруются. Скрытый fallback на незашифрованные копии запрещен.
+- **Защита от параллельного запуска**: используется `flock` (файл `.backup.lock`) с гарантированным снятием блокировки при завершении.
+- **Безопасное восстановление**: скрипт `restore.sh` проверяет целостность бэкапа перед заменой рабочей базы данных и сохраняет защитный пред-восстановительный снимок (`.pre_restore`).
+
+#### Настройка скриптов:
 ```bash
-chmod +x /opt/gluco-track/backup.sh
+chmod +x /opt/gluco-track/backup.sh /opt/gluco-track/restore.sh
 ```
 
-2. Добавьте задачу в cron сервера:
+#### Настройка расписания в cron (00:00 по Москве):
 ```bash
-# Для системного времени сервера в UTC (00:00 МСК = 21:00 UTC):
-(crontab -l 2>/dev/null | grep -v "backup.sh"; echo "0 21 * * * /opt/gluco-track/backup.sh") | crontab -
-
-# Или с явным указанием часового пояса Москвы:
+# Вариант 1 (рекомендуемый): с явным указанием часового пояса Москвы в cron:
 (crontab -l 2>/dev/null | grep -v "backup.sh"; echo "CRON_TZ=Europe/Moscow"; echo "0 0 * * * /opt/gluco-track/backup.sh") | crontab -
+
+# Вариант 2: для серверов со стандартным системным временем UTC (00:00 МСК = 21:00 UTC):
+(crontab -l 2>/dev/null | grep -v "backup.sh"; echo "0 21 * * * /opt/gluco-track/backup.sh") | crontab -
 ```
 
-3. Ручная проверка создания бэкапа:
+#### Ручной запуск резервного копирования:
 ```bash
+# 1. Создание стандартного бэкапа с правами 0600:
 /opt/gluco-track/backup.sh
+
+# 2. Создание зашифрованного бэкапа (AES-256-CBC PBKDF2):
+BACKUP_ENCRYPTION_KEY="ваш_стойкий_секретный_ключ" /opt/gluco-track/backup.sh
+# Или с чтением ключа из защищенного файла (например, /etc/glucotrack/backup.key с правами 0400):
+BACKUP_ENCRYPTION_KEY_FILE="/etc/glucotrack/backup.key" /opt/gluco-track/backup.sh
 ```
-Резервная копия сохранится в каталоге `/opt/gluco-track/backups/glucotrack_latest_backup.db`.
+
+#### Восстановление из резервной копии:
+```bash
+# 1. Остановка контейнера (рекомендуется для исключения блокировок WAL):
+docker compose down
+
+# 2. Восстановление из незашифрованного бэкапа:
+/opt/gluco-track/restore.sh /opt/gluco-track/backups/glucotrack_backup_20261102_000000.db
+
+# 3. Восстановление из зашифрованного бэкапа:
+BACKUP_ENCRYPTION_KEY="ваш_стойкий_секретный_ключ" /opt/gluco-track/restore.sh /opt/gluco-track/backups/glucotrack_backup_20261102_000000.db.enc
+
+# 4. Запуск контейнера:
+docker compose up -d
+```
 
 ---
 
@@ -138,6 +173,9 @@ server {
     listen [::]:443 ssl;
     server_name gluco.example.com;
 
+    # Скрытие версии Nginx (SEC-08)
+    server_tokens off;
+
     http2 on;
 
     ssl_certificate /etc/letsencrypt/live/gluco.example.com/fullchain.pem;
@@ -145,11 +183,26 @@ server {
     include /etc/letsencrypt/options-ssl-nginx.conf;
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 
-    # Заголовки безопасности
+    # Заголовки безопасности (SEC-08)
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-XSS-Protection "1; mode=block" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    # HSTS (Strict-Transport-Security): 1 год без preload и includeSubDomains (SEC-08 Req 3)
+    add_header Strict-Transport-Security "max-age=31536000" always;
+
+    # Permissions-Policy: ограничение неиспользуемых браузерных API
+    add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=()" always;
+
+    # Cross-Origin Policies (COOP & CORP)
+    add_header Cross-Origin-Opener-Policy "same-origin" always;
+    add_header Cross-Origin-Resource-Policy "same-origin" always;
+
+    # Content-Security-Policy (CSP) (SEC-08, SEC-10: все шрифты загружаются локально)
+    # Примечание: для отладки перед переходом на блокирующий режим можно включить режим Report-Only:
+    # add_header Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; connect-src 'self' ws: wss:; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self';" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; connect-src 'self' ws: wss:; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self';" always;
 
     # Gzip сжатие
     gzip on;
@@ -275,27 +328,51 @@ docker compose down
 
 ---
 
-### ⏰ Automated Daily Backup Setup (Cron)
+### ⏰ Automated Daily Backup & Recovery Setup (SEC-07)
 
-1. Make the backup script executable:
+#### Security & Architecture Highlights:
+- **SQLite WAL Consistency**: uses the SQLite Online Backup API (`sqlite3 .backup`), eliminating database corruption risks while transactions are written to the WAL journal. The unsafe `cp` fallback has been completely removed.
+- **Data Integrity Verification**: runs `PRAGMA integrity_check` before publishing any backup. Corrupted snapshots are immediately rejected.
+- **Versioning & 30-Day Rotation**: backups are named `glucotrack_backup_YYYYMMDD_HHMMSS.db` (or `.db.enc`), with automatic retention of the 30 most recent daily backups.
+- **Strict Access Permissions**: sets `umask 077` (directory `0700`, backup files `0600`).
+- **AES-256-CBC PBKDF2 Encryption**: optional military-grade encryption via `BACKUP_ENCRYPTION_KEY` or `BACKUP_ENCRYPTION_KEY_FILE`. Silent unencrypted fallback is strictly prohibited.
+- **Concurrency Locking**: prevents concurrent runs via `flock` on `.backup.lock`.
+- **Safe Disaster Recovery**: the `restore.sh` utility verifies integrity before replacing the live database and creates an automatic safety snapshot (`.pre_restore`).
+
+#### Setup:
 ```bash
-chmod +x /opt/gluco-track/backup.sh
+chmod +x /opt/gluco-track/backup.sh /opt/gluco-track/restore.sh
 ```
 
-2. Add a cron schedule:
+#### Cron Schedule (00:00 Moscow Time):
 ```bash
-# If your server runs in UTC (00:00 MSK = 21:00 UTC):
-(crontab -l 2>/dev/null | grep -v "backup.sh"; echo "0 21 * * * /opt/gluco-track/backup.sh") | crontab -
-
-# Or with explicit Europe/Moscow timezone:
+# Option 1 (recommended): with explicit Moscow timezone in crontab:
 (crontab -l 2>/dev/null | grep -v "backup.sh"; echo "CRON_TZ=Europe/Moscow"; echo "0 0 * * * /opt/gluco-track/backup.sh") | crontab -
+
+# Option 2: for servers running on UTC (00:00 MSK = 21:00 UTC):
+(crontab -l 2>/dev/null | grep -v "backup.sh"; echo "0 21 * * * /opt/gluco-track/backup.sh") | crontab -
 ```
 
-3. Test run manually:
+#### Run Manual Backup:
 ```bash
+# Standard backup (mode 0600):
 /opt/gluco-track/backup.sh
+
+# Encrypted backup (AES-256-CBC PBKDF2):
+BACKUP_ENCRYPTION_KEY="your_secure_passphrase" /opt/gluco-track/backup.sh
 ```
-Backup file is created at `/opt/gluco-track/backups/glucotrack_latest_backup.db`.
+
+#### Disaster Recovery:
+```bash
+# 1. Stop container:
+docker compose down
+
+# 2. Restore from backup:
+/opt/gluco-track/restore.sh /opt/gluco-track/backups/glucotrack_backup_20261102_000000.db
+
+# 3. Start container:
+docker compose up -d
+```
 
 ---
 

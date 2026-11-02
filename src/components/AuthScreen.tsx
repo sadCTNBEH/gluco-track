@@ -43,8 +43,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess, onOpenPolicy 
         if (!username.trim() || username.trim().length < 3) {
           throw new Error('Логин должен содержать не менее 3 символов');
         }
-        if (!password || password.length < 5) {
-          throw new Error('Пароль должен содержать не менее 5 символов');
+        if (!password || password.length < 12) {
+          throw new Error('Пароль должен содержать не менее 12 символов');
         }
         const data = await api.register(username.trim(), password, patientName.trim());
         onSuccess(data);
@@ -196,7 +196,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess, onOpenPolicy 
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder={isRegister ? 'Минимум 5 знаков' : 'Ваш пароль'}
+                  placeholder={isRegister ? 'Минимум 12 знаков' : 'Ваш пароль'}
                   className="w-full min-h-[44px] pl-10 pr-3.5 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-colors"
                 />
               </div>

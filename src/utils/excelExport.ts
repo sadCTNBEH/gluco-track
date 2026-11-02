@@ -1,6 +1,6 @@
 import writeXlsxFile, { SheetData, Row, Cell } from 'write-excel-file/browser';
 import { DiaryEntry, UserSettings } from '../types/diabetes';
-import { evaluateGlucose } from './diabetes';
+import { evaluateGlucose, escapeFormulaInjection } from './diabetes';
 
 const TAG_TRANSLATIONS: Record<string, string> = {
   breakfast: 'Завтрак',
@@ -45,7 +45,7 @@ export async function exportEntriesToXLSX(
     val !== null && val !== undefined && !isNaN(val) ? { type: Number, value: val } : null;
 
   const strCell = (val: string | null | undefined): Cell =>
-    val ? { type: String, value: val } : null;
+    val ? { type: String, value: escapeFormulaInjection(val) } : null;
 
   const dataRows: Row[] = sorted.map((entry) => {
     const evalResult = evaluateGlucose(entry.glucose, settings);

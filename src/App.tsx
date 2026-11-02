@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { DiaryEntry, UserSettings } from './types/diabetes';
 import { DEFAULT_SETTINGS, calculateMonthlyStats } from './utils/diabetes';
 import { Header, ActiveTab, ViewMode } from './components/Header';
@@ -23,14 +23,27 @@ import { TelemetryBar } from './components/TelemetryBar';
 import { Theme, getInitialTheme, applyTheme } from './utils/theme';
 import { api, AuthUser } from './api/client';
 import { Plus, Loader2 } from 'lucide-react';
-
-const STORAGE_KEY_ENTRIES = 'diabetes_diary_entries_v1';
-const STORAGE_KEY_SETTINGS = 'diabetes_diary_settings_v1';
+import {
+  getUserCachedEntries,
+  setUserCachedEntries,
+  removeUserCachedEntries,
+  getUserCachedSettings,
+  setUserCachedSettings,
+  clearUserStorage,
+  getLegacyUnmigratedEntries,
+  getLegacyUnmigratedSettings,
+  cleanupLegacyStorage,
+} from './utils/userStorage';
+import { LegacyDataMigrationModal } from './components/LegacyDataMigrationModal';
 
 export default function App() {
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [authChecking, setAuthChecking] = useState(true);
+
+  // Ссылки для предотвращения race condition при смене пользователей и выходе
+  const currentUserIdRef = useRef<string | null>(null);
+  const loadRequestIdRef = useRef<number>(0);
 
   // Применяем тему оформления при монтировании и изменении
   useEffect(() => {
@@ -55,6 +68,11 @@ export default function App() {
   const [privacyModalTab, setPrivacyModalTab] = useState<'policy' | 'medical'>('policy');
   const [dayToDelete, setDayToDelete] = useState<{ date: string; count: number } | null>(null);
 
+  // Состояние безопасной миграции устаревшего общего кэша (версии 1.0)
+  const [legacyMigrationOpen, setLegacyMigrationOpen] = useState(false);
+  const [legacyEntriesToMigrate, setLegacyEntriesToMigrate] = useState<DiaryEntry[]>([]);
+  const [legacySettingsToMigrate, setLegacySettingsToMigrate] = useState<Partial<UserSettings> | null>(null);
+
   const handleDeleteDayClick = (date: string, count: number) => {
     setDayToDelete({ date, count });
   };
@@ -76,8 +94,12 @@ export default function App() {
     setIsPrivacyModalOpen(true);
   };
 
-  // Загрузка данных пользователя с сервера
-  const loadUserData = useCallback(async () => {
+  // Загрузка данных пользователя (Сервер — основной источник истины)
+  const loadUserData = useCallback(async (targetUser: AuthUser) => {
+    const targetUserId = targetUser.id;
+    currentUserIdRef.current = targetUserId;
+    const currentRequestId = ++loadRequestIdRef.current;
+
     setLoadingData(true);
     try {
       const [serverEntries, serverSettings] = await Promise.all([
@@ -85,43 +107,49 @@ export default function App() {
         api.getSettings(),
       ]);
 
-      if (serverSettings) {
-        setSettings({ ...DEFAULT_SETTINGS, ...serverSettings });
+      // Защита от race condition: если во время загрузки пользователь сменился или вышел
+      if (currentRequestId !== loadRequestIdRef.current || currentUserIdRef.current !== targetUserId) {
+        return;
       }
 
-      if (Array.isArray(serverEntries) && serverEntries.length > 0) {
-        setEntries(serverEntries);
-      } else {
-        // Если база пустая, проверяем локальный кэш или оставляем пустой
-        const localSaved = localStorage.getItem(STORAGE_KEY_ENTRIES);
-        if (localSaved) {
-          try {
-            const parsed = JSON.parse(localSaved);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              setEntries(parsed);
-              // Синхронизируем локальные данные на сервер
-              await api.importEntries(parsed, false).catch(() => {});
-            }
-          } catch {
-            setEntries([]);
-          }
-        } else {
-          setEntries([]);
-        }
+      // 1. Серверные настройки — источник истины
+      if (serverSettings) {
+        const mergedSettings = { ...DEFAULT_SETTINGS, ...serverSettings };
+        setSettings(mergedSettings);
+        setUserCachedSettings(targetUserId, mergedSettings);
+      }
+
+      // 2. Серверные записи — источник истины
+      const validEntries = Array.isArray(serverEntries) ? serverEntries : [];
+      setEntries(validEntries);
+      setUserCachedEntries(targetUserId, validEntries);
+
+      // 3. Проверка наличия немигрированного старого локального кэша (без автоимпорта!)
+      const unmigrated = getLegacyUnmigratedEntries();
+      if (unmigrated.length > 0) {
+        setLegacyEntriesToMigrate(unmigrated);
+        setLegacySettingsToMigrate(getLegacyUnmigratedSettings());
+        setLegacyMigrationOpen(true);
       }
     } catch (err) {
+      // Защита от race condition
+      if (currentRequestId !== loadRequestIdRef.current || currentUserIdRef.current !== targetUserId) {
+        return;
+      }
       console.error('Ошибка загрузки данных с сервера:', err);
-      // Fallback на LocalStorage в случае сетевого сбоя
-      const saved = localStorage.getItem(STORAGE_KEY_ENTRIES);
-      if (saved) {
-        try {
-          setEntries(JSON.parse(saved));
-        } catch {
-          setEntries([]);
-        }
+
+      // При ошибке сети изолированный fallback ТОЛЬКО на локальный кэш текущего пользователя
+      const userEntriesCache = getUserCachedEntries(targetUserId);
+      const userSettingsCache = getUserCachedSettings(targetUserId);
+
+      setEntries(userEntriesCache);
+      if (userSettingsCache) {
+        setSettings({ ...DEFAULT_SETTINGS, ...userSettingsCache });
       }
     } finally {
-      setLoadingData(false);
+      if (currentRequestId === loadRequestIdRef.current && currentUserIdRef.current === targetUserId) {
+        setLoadingData(false);
+      }
     }
   }, []);
 
@@ -134,7 +162,7 @@ export default function App() {
         if (isMounted) {
           if (res?.user) {
             setUser(res.user);
-            await loadUserData();
+            await loadUserData(res.user);
           } else {
             setUser(null);
           }
@@ -150,16 +178,16 @@ export default function App() {
     };
   }, [loadUserData]);
 
-  // Кэширование в LocalStorage для оффлайн-доступа
+  // Кэширование в LocalStorage для оффлайн-доступа строго по user.id
   useEffect(() => {
-    if (user && entries.length > 0) {
-      localStorage.setItem(STORAGE_KEY_ENTRIES, JSON.stringify(entries));
+    if (user?.id) {
+      setUserCachedEntries(user.id, entries);
     }
   }, [entries, user]);
 
   useEffect(() => {
-    if (user) {
-      localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(settings));
+    if (user?.id) {
+      setUserCachedSettings(user.id, settings);
     }
   }, [settings, user]);
 
@@ -180,8 +208,8 @@ export default function App() {
         console.error('Ошибка сохранения на сервер:', err);
       }
     } else {
-      // Создание новой записи
-      const tempId = `entry-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      // Создание новой записи с криптографически безопасным UUID (SEC-11)
+      const tempId = crypto.randomUUID();
       const newEntry: DiaryEntry = {
         ...data,
         id: tempId,
@@ -216,8 +244,9 @@ export default function App() {
   };
 
   const handleClearAll = async () => {
+    if (!user) return;
     setEntries([]);
-    localStorage.removeItem(STORAGE_KEY_ENTRIES);
+    removeUserCachedEntries(user.id);
     try {
       await api.clearEntries();
     } catch (err) {
@@ -227,6 +256,9 @@ export default function App() {
 
   const handleUpdateSettings = async (newSettings: UserSettings) => {
     setSettings(newSettings);
+    if (user?.id) {
+      setUserCachedSettings(user.id, newSettings);
+    }
     try {
       await api.updateSettings(newSettings);
     } catch (err) {
@@ -236,21 +268,68 @@ export default function App() {
 
   // Импорт из файла Excel
   const handleExcelImport = async (importedEntries: DiaryEntry[], replaceAll: boolean) => {
-    if (replaceAll) {
-      setEntries(importedEntries);
-    } else {
-      setEntries((prev) => [...importedEntries, ...prev]);
+    const updatedEntries = replaceAll ? importedEntries : [...importedEntries, ...entries];
+    setEntries(updatedEntries);
+    if (user?.id) {
+      setUserCachedEntries(user.id, updatedEntries);
     }
     await api.importEntries(importedEntries, replaceAll);
+  };
+
+  // Подтвержденная пользователем безопасная миграция старых записей
+  const handleConfirmLegacyMigration = async () => {
+    if (!user || legacyEntriesToMigrate.length === 0) return;
+    const toMigrate = [...legacyEntriesToMigrate];
+    const updated = [...toMigrate, ...entries];
+    setEntries(updated);
+    if (user.id) {
+      setUserCachedEntries(user.id, updated);
+    }
+    cleanupLegacyStorage();
+    setLegacyEntriesToMigrate([]);
+    setLegacySettingsToMigrate(null);
+    try {
+      await api.importEntries(toMigrate, false);
+    } catch (err) {
+      console.error('Ошибка импорта мигрированных записей на сервер:', err);
+    }
+  };
+
+  // Отклонение и удаление старого кэша
+  const handleDiscardLegacy = () => {
+    cleanupLegacyStorage();
+    setLegacyEntriesToMigrate([]);
+    setLegacySettingsToMigrate(null);
   };
 
   // Выход из системы
   const handleLogout = async () => {
     if (confirm('Выйти из дневника?')) {
-      await api.logout();
+      const loggingOutUserId = user?.id;
+
+      // 1. Отменяем любые выполняющиеся асинхронные запросы
+      loadRequestIdRef.current++;
+      currentUserIdRef.current = null;
+
+      // 2. Очищаем состояние в памяти
       setUser(null);
       setEntries([]);
-      localStorage.removeItem(STORAGE_KEY_ENTRIES);
+      setSettings(DEFAULT_SETTINGS);
+      setLegacyMigrationOpen(false);
+      setLegacyEntriesToMigrate([]);
+      setLegacySettingsToMigrate(null);
+
+      // 3. Очищаем чувствительные данные пользователя из локального хранилища
+      if (loggingOutUserId) {
+        clearUserStorage(loggingOutUserId);
+      }
+
+      // 4. Отзываем сессию на сервере и удаляем токен
+      try {
+        await api.logout();
+      } catch (err) {
+        console.error('Ошибка при выходе на сервере:', err);
+      }
     }
   };
 
@@ -271,7 +350,7 @@ export default function App() {
         <AuthScreen
           onSuccess={(authData) => {
             setUser(authData.user);
-            loadUserData();
+            loadUserData(authData.user);
           }}
           onOpenPolicy={handleOpenPolicy}
         />
@@ -464,6 +543,17 @@ export default function App() {
 
       {/* Уведомление об использовании Cookie и LocalStorage (152-ФЗ) */}
       <CookieBanner onOpenPolicy={() => handleOpenPolicy('policy')} />
+
+      {/* Модальное окно безопасной миграции старых локальных записей */}
+      <LegacyDataMigrationModal
+        isOpen={legacyMigrationOpen}
+        onClose={() => setLegacyMigrationOpen(false)}
+        username={user.username}
+        legacyEntries={legacyEntriesToMigrate}
+        legacySettings={legacySettingsToMigrate}
+        onConfirmMigration={handleConfirmLegacyMigration}
+        onDiscardLegacy={handleDiscardLegacy}
+      />
 
       {/* Подвал сайта */}
       <Footer

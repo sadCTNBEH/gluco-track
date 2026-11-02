@@ -5,8 +5,13 @@ services:
       dockerfile: Dockerfile
     container_name: glucotrack-app
     restart: unless-stopped
+    # Запуск от непривилегированного пользователя node (UID/GID 1000) (SEC-09)
+    user: "1000:1000"
+    # Защита от повышения привилегий внутри контейнера (SEC-09)
+    security_opt:
+      - no-new-privileges:true
     ports:
-      # Проброс на локальный порт 4999 хоста для обратного прокси Nginx
+      # Проброс на локальный порт 4999 хоста для обратного прокси Nginx (SEC-08 Req 9)
       - "127.0.0.1:4999:4999"
     volumes:
       # База данных сохраняется вне контейнера в папке ./data на сервере
@@ -15,6 +20,8 @@ services:
       - NODE_ENV=production
       - PORT=4999
       - DATA_DIR=/app/data
+      - APP_ORIGIN=https://gluco.example.com
+      - TRUST_PROXY=loopback, 172.16.0.0/12, 10.0.0.0/8
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4999/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
       interval: 30s

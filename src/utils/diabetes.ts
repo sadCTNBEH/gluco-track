@@ -434,7 +434,103 @@ export function formatMonthYearRussian(monthStr: string): string {
 }
 
 /**
- * Экспорт записей в CSV
+ * Регулярное выражение для обнаружения потенциально опасных префиксов формул (Formula Injection / CWE-1236).
+ * Проверяет наличие =, +, -, @, |, % или управляющих символов (\t, \r) в начале строки,
+ * включая случаи с предшествующими пробелами, табуляциями, переносами строк или неразрывными пробелами.
+ */
+export const FORMULA_PREFIX_REGEX = /^[\s\u00A0]*[=+\-@\t\r%|]/;
+
+/**
+ * Проверяет, является ли строка потенциальной формулой, способной исполниться в Excel/Calc.
+ */
+export function isFormulaInjection(value: string): boolean {
+  if (typeof value !== 'string' || value.length === 0) return false;
+  // Начинается с управляющего символа \t или \r
+  if (value.startsWith('\t') || value.startsWith('\r')) return true;
+  // Обрезаем любые ведущие пробельные символы (пробелы, табы, переносы строк, неразрывные пробелы)
+  const trimmed = value.replace(/^[\s\u00A0]+/, '');
+  if (trimmed.length === 0) return false;
+  // Проверяем первый значащий символ
+  const firstChar = trimmed[0];
+  return (
+    firstChar === '=' ||
+    firstChar === '+' ||
+    firstChar === '-' ||
+    firstChar === '@' ||
+    firstChar === '|' ||
+    firstChar === '%'
+  );
+}
+
+/**
+ * Нейтрализует Formula Injection для значения ячейки CSV/XLSX.
+ * Добавляет ведущий апостроф `'`, если строка может быть интерпретирована как формула.
+ * Не мутирует исходные данные (чистая функция).
+ */
+export function escapeFormulaInjection(value: string): string {
+  if (typeof value !== 'string' || value.length === 0) return '';
+  if (isFormulaInjection(value)) {
+    return `'${value}`;
+  }
+  return value;
+}
+
+/**
+ * Восстанавливает исходный текст ячейки при импорте (убирает защитный ведущий апостроф,
+ * если он был добавлен исключительно для нейтрализации Formula Injection).
+ */
+export function unescapeFormulaInjection(value: string): string {
+  if (typeof value !== 'string' || value.length === 0) return '';
+  if (value.startsWith("'") && isFormulaInjection(value.slice(1))) {
+    return value.slice(1);
+  }
+  return value;
+}
+
+/**
+ * Форматирует и экранирует отдельную ячейку CSV согласно RFC 4180 и защите от инъекций формул.
+ * 1. Нейтрализует Formula Injection (добавляя ведущий апостроф к строкам с опасными префиксами).
+ * 2. Экранирует внутренние двойные кавычки (" -> "").
+ * 3. Оборачивает ячейку в кавычки при наличии разделителя, кавычек, переносов строк или защитного апострофа.
+ */
+export function formatCsvCell(value: unknown, delimiter = ';'): string {
+  if (value === null || value === undefined) {
+    return '';
+  }
+
+  // Числа форматируем с запятой вместо точки для русской локали
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return '';
+    return String(value).replace('.', ',');
+  }
+
+  const str = String(value);
+  if (str.length === 0) {
+    return '';
+  }
+
+  // Нейтрализация Formula Injection
+  const safeStr = escapeFormulaInjection(str);
+
+  // Проверяем, требуется ли обрамление кавычками:
+  // - если строка содержит разделитель (; или ,)
+  // - если строка содержит кавычки (")
+  // - если строка содержит перенос строки (\n или \r)
+  // - если строка начинается с защитного апострофа (')
+  const needsQuotes =
+    safeStr.includes(delimiter) ||
+    safeStr.includes('"') ||
+    safeStr.includes('\n') ||
+    safeStr.includes('\r') ||
+    safeStr.startsWith("'");
+
+  const escaped = safeStr.replace(/"/g, '""');
+
+  return needsQuotes ? `"${escaped}"` : escaped;
+}
+
+/**
+ * Экспорт записей в CSV с защитой от Formula Injection (CWE-1236 / SEC-03)
  */
 export function exportEntriesToCSV(entries: DiaryEntry[]): string {
   const headers = [
@@ -450,21 +546,24 @@ export function exportEntriesToCSV(entries: DiaryEntry[]): string {
     'Еда / нагрузка / комментарий',
   ];
 
+  const headerRow = headers.map((h) => formatCsvCell(h)).join(';');
+
   const rows = entries.map((e) => {
     const evalStatus = evaluateGlucose(e.glucose);
     return [
-      e.date,
-      e.time,
-      e.glucose !== null ? e.glucose.toString().replace('.', ',') : '',
-      evalStatus ? evalStatus.shortLabel : '',
-      e.carbs !== null ? e.carbs.toString() : '',
-      e.xe !== null ? e.xe.toString().replace('.', ',') : '',
-      e.rinFast !== null ? e.rinFast.toString() : '',
-      e.tresiba !== null ? e.tresiba.toString() : '',
-      e.calories !== null ? e.calories.toString() : '',
-      `"${(e.notes || '').replace(/"/g, '""')}"`,
+      formatCsvCell(e.date),
+      formatCsvCell(e.time),
+      formatCsvCell(e.glucose !== null && e.glucose !== undefined ? e.glucose.toString().replace('.', ',') : ''),
+      formatCsvCell(evalStatus ? evalStatus.shortLabel : ''),
+      formatCsvCell(e.carbs !== null && e.carbs !== undefined ? e.carbs.toString() : ''),
+      formatCsvCell(e.xe !== null && e.xe !== undefined ? e.xe.toString().replace('.', ',') : ''),
+      formatCsvCell(e.rinFast !== null && e.rinFast !== undefined ? e.rinFast.toString() : ''),
+      formatCsvCell(e.tresiba !== null && e.tresiba !== undefined ? e.tresiba.toString() : ''),
+      formatCsvCell(e.calories !== null && e.calories !== undefined ? e.calories.toString() : ''),
+      formatCsvCell(e.notes || ''),
     ].join(';');
   });
 
-  return [headers.join(';'), ...rows].join('\r\n');
+  // Добавляем UTF-8 BOM (\uFEFF) для корректного открытия русских символов в Excel без искажения кодировки
+  return '\uFEFF' + [headerRow, ...rows].join('\r\n');
 }
