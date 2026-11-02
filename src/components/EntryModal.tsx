@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { DiaryEntry } from '../types/diabetes';
+import { DiaryEntry, UserSettings } from '../types/diabetes';
 import { evaluateGlucose, calculateXE } from '../utils/diabetes';
 import { X, Check, Activity, Utensils, Syringe, Moon, Flame, Clock, Calendar, AlertCircle } from 'lucide-react';
 
@@ -11,6 +11,7 @@ interface EntryModalProps {
   xeRatio?: number;
   bolusName?: string;
   basalName?: string;
+  settings?: UserSettings;
 }
 
 const CONTEXT_TAGS = [
@@ -32,6 +33,7 @@ export const EntryModal: React.FC<EntryModalProps> = ({
   xeRatio = 12,
   bolusName = 'РинФаст',
   basalName = 'Тресиба',
+  settings,
 }) => {
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
@@ -112,7 +114,7 @@ export const EntryModal: React.FC<EntryModalProps> = ({
   };
 
   const parsedGlucose = glucoseStr ? parseFloat(glucoseStr.replace(',', '.')) : null;
-  const glucoseEval = parsedGlucose !== null && !isNaN(parsedGlucose) ? evaluateGlucose(parsedGlucose) : null;
+  const glucoseEval = parsedGlucose !== null && !isNaN(parsedGlucose) ? evaluateGlucose(parsedGlucose, settings) : null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

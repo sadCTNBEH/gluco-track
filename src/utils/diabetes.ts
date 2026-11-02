@@ -27,19 +27,26 @@ export interface GlucoseEvaluation {
 
 /**
  * Оценка уровня сахара в крови:
- * < 3.9  => Низкий (гипогликемия, выделяется красным)
- * 4.0 .. 9.9 => Норма (целевой диапазон, выделяется зеленым)
+ * < 3.9 (или hypoThreshold) => Низкий (гипогликемия, выделяется красным)
+ * 4.0 .. 9.9 (или targetHigh) => Норма (целевой диапазон, выделяется зеленым)
  * 10.0 .. 13.9 => Высокий (выделяется желтым/янтарным)
  * > 13.9 => Очень высокий (выделяется красным/пурпурным)
  */
-export function evaluateGlucose(glucose: number | null | undefined): GlucoseEvaluation | null {
+export function evaluateGlucose(
+  glucose: number | null | undefined,
+  settings?: Partial<UserSettings> | { targetLow?: number; targetHigh?: number; hypoThreshold?: number; severeHyperThreshold?: number }
+): GlucoseEvaluation | null {
   if (glucose === null || glucose === undefined || isNaN(glucose) || glucose <= 0) {
     return null;
   }
 
   const val = Number(glucose.toFixed(1));
+  const hypoThreshold = settings?.hypoThreshold ?? 3.9;
+  const targetHigh = settings?.targetHigh ?? 9.9;
+  const severeHyperThreshold = settings?.severeHyperThreshold ?? 13.9;
+  const targetLow = settings?.targetLow ?? Number((hypoThreshold + 0.1).toFixed(1));
 
-  if (val <= 3.9) {
+  if (val <= hypoThreshold) {
     return {
       status: 'low',
       label: 'Низкий (Гипо)',
@@ -48,11 +55,11 @@ export function evaluateGlucose(glucose: number | null | undefined): GlucoseEval
       textClass: 'text-red-600 dark:text-red-400 font-bold',
       bgClass: 'bg-red-500/10',
       borderClass: 'border-red-400',
-      description: 'Гипогликемия (≤ 3.9 ммоль/л). Требуется купирование быстрыми углеводами.',
+      description: `Гипогликемия (≤ ${hypoThreshold} ммоль/л). Требуется купирование быстрыми углеводами.`,
     };
   }
 
-  if (val <= 9.9) {
+  if (val <= targetHigh) {
     return {
       status: 'normal',
       label: 'Норма',
@@ -61,11 +68,11 @@ export function evaluateGlucose(glucose: number | null | undefined): GlucoseEval
       textClass: 'text-emerald-600 dark:text-emerald-400 font-bold',
       bgClass: 'bg-emerald-500/10',
       borderClass: 'border-emerald-400',
-      description: 'Целевой диапазон (4.0 – 9.9 ммоль/л). Отличный контроль.',
+      description: `Целевой диапазон (${targetLow} – ${targetHigh} ммоль/л). Отличный контроль.`,
     };
   }
 
-  if (val <= 13.9) {
+  if (val <= severeHyperThreshold) {
     return {
       status: 'high',
       label: 'Высокий',
@@ -74,11 +81,11 @@ export function evaluateGlucose(glucose: number | null | undefined): GlucoseEval
       textClass: 'text-amber-600 dark:text-amber-400 font-bold',
       bgClass: 'bg-amber-500/10',
       borderClass: 'border-amber-400',
-      description: 'Повышенный уровень (10.0 – 13.9 ммоль/л). Гипергликемия.',
+      description: `Повышенный уровень (${(targetHigh + 0.1).toFixed(1)} – ${severeHyperThreshold} ммоль/л). Гипергликемия.`,
     };
   }
 
-  // > 13.9
+  // > severeHyperThreshold
   return {
     status: 'very_high',
     label: 'Очень высокий',
@@ -87,7 +94,7 @@ export function evaluateGlucose(glucose: number | null | undefined): GlucoseEval
     textClass: 'text-rose-600 dark:text-rose-400 font-extrabold',
     bgClass: 'bg-rose-500/15',
     borderClass: 'border-rose-500',
-    description: 'Выраженная гипергликемия (> 13.9 ммоль/л). Требуется контроль кетонов и коррекция.',
+    description: `Выраженная гипергликемия (> ${severeHyperThreshold} ммоль/л). Требуется контроль кетонов и коррекция.`,
   };
 }
 
@@ -250,7 +257,11 @@ export function isDayComplete(dayEntries: DiaryEntry[]): boolean {
 /**
  * Расчет статистики за месяц
  */
-export function calculateMonthlyStats(entries: DiaryEntry[], monthStr?: string): MonthlyStats {
+export function calculateMonthlyStats(
+  entries: DiaryEntry[],
+  monthStr?: string,
+  settings?: UserSettings
+): MonthlyStats {
   const targetMonth = monthStr || new Date().toISOString().slice(0, 7); // YYYY-MM
   const monthEntries = entries.filter((e) => e.date.startsWith(targetMonth));
 
@@ -278,7 +289,7 @@ export function calculateMonthlyStats(entries: DiaryEntry[], monthStr?: string):
       glucoseSum += entry.glucose;
       glucoseCount++;
 
-      const evaluation = evaluateGlucose(entry.glucose);
+      const evaluation = evaluateGlucose(entry.glucose, settings);
       if (evaluation) {
         if (evaluation.status === 'low') lowCount++;
         else if (evaluation.status === 'normal') normalCount++;

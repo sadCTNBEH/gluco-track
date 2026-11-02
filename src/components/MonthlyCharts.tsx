@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { DiaryEntry } from '../types/diabetes';
+import { DiaryEntry, UserSettings } from '../types/diabetes';
 import {
   calculateMonthlyStats,
   evaluateGlucose,
@@ -21,12 +21,14 @@ interface MonthlyChartsProps {
   entries: DiaryEntry[];
   bolusName?: string;
   basalName?: string;
+  settings?: UserSettings;
 }
 
 export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({
   entries,
   bolusName = 'РинФаст',
   basalName = 'Тресиба',
+  settings,
 }) => {
   // Список доступных месяцев
   const availableMonths = useMemo(() => {
@@ -54,8 +56,8 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({
 
   // Статистика за выбранный месяц
   const stats = useMemo(() => {
-    return calculateMonthlyStats(entries, selectedMonth);
-  }, [entries, selectedMonth]);
+    return calculateMonthlyStats(entries, selectedMonth, settings);
+  }, [entries, selectedMonth, settings]);
 
   // Записи за выбранный месяц с замерами сахара
   const monthEntries = useMemo(() => {
@@ -152,9 +154,12 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({
     return padding.left + fraction * innerWidth;
   };
 
-  // Координаты целевого коридора (4.0 - 9.9)
-  const yLowTarget = getY(4.0);
-  const yHighTarget = getY(9.9);
+  // Координаты целевого коридора
+  const targetLow = settings?.targetLow ?? 4.0;
+  const targetHigh = settings?.targetHigh ?? 9.9;
+  const hypoThreshold = settings?.hypoThreshold ?? 3.9;
+  const yLowTarget = getY(targetLow);
+  const yHighTarget = getY(targetHigh);
 
   return (
     <div className="space-y-6">
@@ -226,7 +231,7 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({
         {/* Доля в целевом диапазоне */}
         <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-1">
           <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-            <span className="font-semibold">В норме (4.0–9.9)</span>
+            <span className="font-semibold">В норме ({targetLow}–{targetHigh})</span>
             <Award className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
           </div>
           <div className="text-2xl font-bold text-emerald-700 dark:text-emerald-400 font-mono">
@@ -277,7 +282,7 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({
               Динамика измерений глюкозы
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Зеленая зона — целевой коридор (4.0 – 9.9 ммоль/л). Нажмите на точку для просмотра данных.
+              Зеленая зона — целевой коридор ({targetLow} – {targetHigh} ммоль/л). Нажмите на точку для просмотра данных.
             </p>
           </div>
 
@@ -285,15 +290,15 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({
           <div className="flex flex-wrap items-center gap-3 text-xs font-medium">
             <span className="flex items-center gap-1 text-amber-700 dark:text-amber-400">
               <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-              <span>&lt; 3.9 Низкий</span>
+              <span>≤ {hypoThreshold} Низкий</span>
             </span>
             <span className="flex items-center gap-1 text-emerald-700 dark:text-emerald-400">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-600" />
-              <span>4.0 – 9.9 Норма</span>
+              <span>{targetLow} – {targetHigh} Норма</span>
             </span>
             <span className="flex items-center gap-1 text-orange-700 dark:text-orange-400">
               <span className="w-2.5 h-2.5 rounded-full bg-orange-500" />
-              <span>10.0 – 13.9 Высокий</span>
+              <span>&gt; {targetHigh} Высокий</span>
             </span>
             <span className="flex items-center gap-1 text-rose-700 dark:text-rose-400">
               <span className="w-2.5 h-2.5 rounded-full bg-rose-600" />
@@ -418,7 +423,7 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({
                 {monthEntries.map((e) => {
                   const x = getX(e.date, e.time);
                   const y = getY(e.glucose || 5.5);
-                  const ev = evaluateGlucose(e.glucose);
+                  const ev = evaluateGlucose(e.glucose, settings);
 
                   const fillColor =
                     ev?.status === 'low'
@@ -478,14 +483,14 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({
                   <div className="text-sm font-bold flex items-center gap-1.5 font-mono text-white">
                     <span>{hoveredPoint.entry.glucose} ммоль/л</span>
                     <span className="text-xs font-sans font-medium px-1.5 py-0.2 rounded bg-slate-800 border border-slate-700">
-                      {evaluateGlucose(hoveredPoint.entry.glucose)?.shortLabel}
+                      {evaluateGlucose(hoveredPoint.entry.glucose, settings)?.shortLabel}
                     </span>
                   </div>
                   {hoveredPoint.entry.rinFast && (
-                    <div className="text-blue-300 font-mono">РинФаст: {hoveredPoint.entry.rinFast} ед</div>
+                    <div className="text-blue-300 font-mono">{bolusName}: {hoveredPoint.entry.rinFast} ед</div>
                   )}
                   {hoveredPoint.entry.tresiba && (
-                    <div className="text-purple-300 font-mono">Тресиба: {hoveredPoint.entry.tresiba} ед</div>
+                    <div className="text-purple-300 font-mono">{basalName}: {hoveredPoint.entry.tresiba} ед</div>
                   )}
                   {hoveredPoint.entry.xe && (
                     <div className="text-teal-300 font-mono">ХЕ: {hoveredPoint.entry.xe} ({hoveredPoint.entry.carbs} г)</div>
@@ -560,7 +565,7 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({
             <div className="flex items-center justify-between p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800">
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 shrink-0" />
-                <span className="font-semibold text-emerald-900 dark:text-emerald-300">Целевой диапазон (4.0 – 9.9)</span>
+                <span className="font-semibold text-emerald-900 dark:text-emerald-300">Целевой диапазон ({targetLow} – {targetHigh})</span>
               </div>
               <div className="font-mono font-bold text-emerald-800 dark:text-emerald-300">
                 {stats.tir.normalCount} ({stats.tir.normalPercent}%)
@@ -570,7 +575,7 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({
             <div className="flex items-center justify-between p-2 rounded-lg bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800">
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-orange-500 shrink-0" />
-                <span className="font-semibold text-orange-900 dark:text-orange-300">Высокий (10.0 – 13.9)</span>
+                <span className="font-semibold text-orange-900 dark:text-orange-300">Высокий (&gt; {targetHigh})</span>
               </div>
               <div className="font-mono font-bold text-orange-800 dark:text-orange-300">
                 {stats.tir.highCount} ({stats.tir.highPercent}%)
@@ -611,7 +616,7 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({
 
           <div className="grid grid-cols-2 gap-2.5">
             {timeOfDayStats.map((item) => {
-              const evalRes = item.avg ? evaluateGlucose(item.avg) : null;
+              const evalRes = item.avg ? evaluateGlucose(item.avg, settings) : null;
 
               return (
                 <div

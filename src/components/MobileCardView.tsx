@@ -1,5 +1,5 @@
 import React from 'react';
-import { DiaryEntry } from '../types/diabetes';
+import { DiaryEntry, UserSettings } from '../types/diabetes';
 import { evaluateGlucose, groupEntriesByDay, formatDateRussian } from '../utils/diabetes';
 import {
   Syringe,
@@ -21,6 +21,7 @@ interface MobileCardViewProps {
   onDeleteDayClick?: (date: string, count: number) => void;
   bolusName?: string;
   basalName?: string;
+  settings?: UserSettings;
 }
 
 const TAG_CONFIG: Record<string, { label: string; className: string }> = {
@@ -42,6 +43,7 @@ export const MobileCardView: React.FC<MobileCardViewProps> = ({
   onDeleteDayClick,
   bolusName = 'РинФаст',
   basalName = 'Тресиба',
+  settings,
 }) => {
   const groupedDays = groupEntriesByDay(entries);
 
@@ -66,7 +68,7 @@ export const MobileCardView: React.FC<MobileCardViewProps> = ({
   return (
     <div className="space-y-4">
       {groupedDays.map(({ date, entries: dayEntries, summary }) => {
-        const dayGlucoseEval = summary.avgGlucose ? evaluateGlucose(summary.avgGlucose) : null;
+        const dayGlucoseEval = summary.avgGlucose ? evaluateGlucose(summary.avgGlucose, settings) : null;
 
         return (
           <div
@@ -146,7 +148,7 @@ export const MobileCardView: React.FC<MobileCardViewProps> = ({
             {/* Individual Records as Cards */}
             <div className="space-y-2 pt-1">
               {dayEntries.map((entry) => {
-                const evalResult = evaluateGlucose(entry.glucose);
+                const evalResult = evaluateGlucose(entry.glucose, settings);
                 const tagInfo = entry.tag && entry.tag !== 'other' ? TAG_CONFIG[entry.tag] : null;
 
                 return (

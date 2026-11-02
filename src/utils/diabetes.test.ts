@@ -40,6 +40,14 @@ test('evaluateGlucose: correctly evaluates glucose ranges according to user spec
   assert.equal(evaluateGlucose(0), null);
 });
 
+test('evaluateGlucose: respects custom target thresholds when settings are passed', () => {
+  const custom = { hypoThreshold: 4.4, targetLow: 4.5, targetHigh: 8.5 };
+  assert.equal(evaluateGlucose(4.4, custom)?.status, 'low');
+  assert.equal(evaluateGlucose(4.5, custom)?.status, 'normal');
+  assert.equal(evaluateGlucose(8.5, custom)?.status, 'normal');
+  assert.equal(evaluateGlucose(8.6, custom)?.status, 'high');
+});
+
 test('calculateXE: correctly divides carbs by 12 and rounds to 1 decimal place', () => {
   assert.equal(calculateXE(12), 1.0);
   assert.equal(calculateXE(24), 2.0);

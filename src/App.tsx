@@ -286,7 +286,7 @@ export default function App() {
   }
 
   // Метрики месяца для плашки статуса
-  const recentStats = calculateMonthlyStats(entries);
+  const recentStats = calculateMonthlyStats(entries, undefined, settings);
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans transition-colors duration-200 flex flex-col selection:bg-teal-500/20 selection:text-teal-900 dark:selection:text-teal-200">
@@ -331,6 +331,7 @@ export default function App() {
                     entries={entries}
                     bolusName={settings.bolusName}
                     basalName={settings.basalName}
+                    settings={settings}
                     onAddClick={() => {
                       setEditingEntry(null);
                       setIsEntryModalOpen(true);
@@ -346,6 +347,7 @@ export default function App() {
                       entries={entries}
                       bolusName={settings.bolusName}
                       basalName={settings.basalName}
+                      settings={settings}
                       onAddClick={() => {
                         setEditingEntry(null);
                         setIsEntryModalOpen(true);
@@ -359,6 +361,7 @@ export default function App() {
                       entries={entries}
                       bolusName={settings.bolusName}
                       basalName={settings.basalName}
+                      settings={settings}
                       onAddClick={() => {
                         setEditingEntry(null);
                         setIsEntryModalOpen(true);
@@ -377,6 +380,7 @@ export default function App() {
                 entries={entries}
                 bolusName={settings.bolusName}
                 basalName={settings.basalName}
+                settings={settings}
               />
             )}
 
@@ -416,6 +420,7 @@ export default function App() {
         xeRatio={settings.xeRatio}
         bolusName={settings.bolusName}
         basalName={settings.basalName}
+        settings={settings}
       />
 
       {/* Модальное окно настроек */}

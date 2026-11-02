@@ -48,7 +48,7 @@ export async function exportEntriesToXLSX(
     val ? { type: String, value: val } : null;
 
   const dataRows: Row[] = sorted.map((entry) => {
-    const evalResult = evaluateGlucose(entry.glucose);
+    const evalResult = evaluateGlucose(entry.glucose, settings);
     return [
       strCell(entry.date),
       strCell(entry.time),

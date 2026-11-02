@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { DiaryEntry } from '../types/diabetes';
+import { DiaryEntry, UserSettings } from '../types/diabetes';
 import { evaluateGlucose, groupEntriesByDay, formatDateRussian } from '../utils/diabetes';
 import {
   Search,
@@ -23,6 +23,7 @@ interface DiaryTableProps {
   onDeleteDayClick?: (date: string, count: number) => void;
   bolusName?: string;
   basalName?: string;
+  settings?: UserSettings;
 }
 
 const TAG_CONFIG: Record<string, { label: string; className: string }> = {
@@ -44,6 +45,7 @@ export const DiaryTable: React.FC<DiaryTableProps> = ({
   onDeleteDayClick,
   bolusName = 'РинФаст',
   basalName = 'Тресиба',
+  settings,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [periodFilter, setPeriodFilter] = useState<'all' | 'today' | '7d' | '14d' | '30d'>('all');
@@ -71,7 +73,7 @@ export const DiaryTable: React.FC<DiaryTableProps> = ({
     }
 
     if (statusFilter !== 'all') {
-      const evalGl = evaluateGlucose(entry.glucose);
+      const evalGl = evaluateGlucose(entry.glucose, settings);
       if (!evalGl || evalGl.status !== statusFilter) return false;
     }
 
@@ -175,7 +177,7 @@ export const DiaryTable: React.FC<DiaryTableProps> = ({
       ) : (
         <div className="space-y-4">
           {groupedDays.map(({ date, entries: dayEntries, summary }) => {
-            const dayGlucoseEval = summary.avgGlucose ? evaluateGlucose(summary.avgGlucose) : null;
+            const dayGlucoseEval = summary.avgGlucose ? evaluateGlucose(summary.avgGlucose, settings) : null;
 
             return (
               <div
@@ -286,7 +288,7 @@ export const DiaryTable: React.FC<DiaryTableProps> = ({
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
                       {dayEntries.map((entry) => {
-                        const evalResult = evaluateGlucose(entry.glucose);
+                        const evalResult = evaluateGlucose(entry.glucose, settings);
                         const tagInfo = entry.tag && entry.tag !== 'other' ? TAG_CONFIG[entry.tag] : null;
 
                         return (

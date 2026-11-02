@@ -14,8 +14,8 @@ export const TelemetryBar: React.FC<TelemetryBarProps> = ({
   settings,
   patientName,
 }) => {
-  const stats = calculateMonthlyStats(entries);
-  const glucoseEval = stats.avgGlucose !== null ? evaluateGlucose(stats.avgGlucose) : null;
+  const stats = calculateMonthlyStats(entries, undefined, settings);
+  const glucoseEval = stats.avgGlucose !== null ? evaluateGlucose(stats.avgGlucose, settings) : null;
 
   const bolusName = settings.bolusName || 'РинФаст';
   const basalName = settings.basalName || 'Тресиба';

@@ -93,7 +93,7 @@ export const DoctorReportPdf: React.FC<DoctorReportPdfProps> = ({
       if (e.glucose !== null && e.glucose > 0) {
         glucoseSum += e.glucose;
         glucoseCount++;
-        const ev = evaluateGlucose(e.glucose);
+        const ev = evaluateGlucose(e.glucose, settings);
         if (ev?.status === 'low') lowCount++;
         else if (ev?.status === 'normal') normalCount++;
         else if (ev?.status === 'high') highCount++;
@@ -342,7 +342,7 @@ export const DoctorReportPdf: React.FC<DoctorReportPdfProps> = ({
                     </thead>
                     <tbody className="divide-y divide-slate-200">
                       {dayEntries.map((e) => {
-                        const ev = evaluateGlucose(e.glucose);
+                        const ev = evaluateGlucose(e.glucose, settings);
 
                         return (
                           <tr key={e.id} className="text-slate-800">
@@ -408,7 +408,7 @@ export const DoctorReportPdf: React.FC<DoctorReportPdfProps> = ({
             <div>Дата проверки: «____» ____________ 202__ г.</div>
           </div>
           <div className="text-[9px] text-slate-400 text-center pt-2 border-t border-slate-200">
-            Документ сформирован пациентом в системе электронного самоконтроля (gluco.zduben.ru) в соответствии со ст. 10 152-ФЗ РФ и 323-ФЗ РФ. Не является окончательным клиническим диагнозом.
+            Документ сформирован пациентом в системе электронного самоконтроля GlucoTrack в соответствии со ст. 10 152-ФЗ РФ и 323-ФЗ РФ. Не является окончательным клиническим диагнозом.
           </div>
         </div>
 

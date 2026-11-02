@@ -10,6 +10,7 @@ import {
   Syringe,
   Moon,
   AlertTriangle,
+  Activity,
 } from 'lucide-react';
 import { Modal } from './ui/Modal';
 import { Button } from './ui/Button';
@@ -213,6 +214,94 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
         </div>
 
+        {/* Целевые уровни сахара в крови */}
+        <div className="space-y-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+          <div className="flex items-center justify-between">
+            <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+              <Activity className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+              Целевой диапазон сахара в крови
+            </h4>
+            <span className="text-[10px] text-slate-400">Границы нормы и гипо</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <div>
+              <label
+                htmlFor="settings-hypo-threshold"
+                className="block text-slate-700 dark:text-slate-300 font-semibold mb-1.5"
+              >
+                Порог гипогликемии (низкий сахар ≤):
+              </label>
+              <div className="relative">
+                <input
+                  id="settings-hypo-threshold"
+                  type="number"
+                  step="0.1"
+                  min="2.0"
+                  max="6.0"
+                  value={settings.hypoThreshold ?? 3.9}
+                  onChange={(e) => {
+                    const val = parseFloat(e.target.value);
+                    if (!isNaN(val)) {
+                      onUpdateSettings({
+                        ...settings,
+                        hypoThreshold: val,
+                        targetLow: Number((val + 0.1).toFixed(1)),
+                      });
+                    }
+                  }}
+                  className="w-full min-h-[44px] px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 font-mono font-bold transition-colors pr-16"
+                />
+                <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400 pointer-events-none">
+                  ммоль/л
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
+                По умолчанию: 3.9 (значения ≤ этого порога считаются гипогликемией)
+              </p>
+            </div>
+
+            <div>
+              <label
+                htmlFor="settings-target-high"
+                className="block text-slate-700 dark:text-slate-300 font-semibold mb-1.5"
+              >
+                Верхний порог (высокий сахар &gt;):
+              </label>
+              <div className="relative">
+                <input
+                  id="settings-target-high"
+                  type="number"
+                  step="0.1"
+                  min="6.0"
+                  max="15.0"
+                  value={settings.targetHigh ?? 9.9}
+                  onChange={(e) => {
+                    const val = parseFloat(e.target.value);
+                    if (!isNaN(val)) {
+                      onUpdateSettings({ ...settings, targetHigh: val });
+                    }
+                  }}
+                  className="w-full min-h-[44px] px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 font-mono font-bold transition-colors pr-16"
+                />
+                <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400 pointer-events-none">
+                  ммоль/л
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
+                По умолчанию: 9.9 (значения &gt; этого порога считаются повышенными)
+              </p>
+            </div>
+          </div>
+
+          <div className="p-3 rounded-xl bg-teal-50/60 dark:bg-teal-950/30 border border-teal-200/60 dark:border-teal-900/40 text-xs text-teal-900 dark:text-teal-200 flex items-center justify-between">
+            <span className="font-medium">Целевой диапазон нормы:</span>
+            <span className="font-mono font-bold text-teal-700 dark:text-teal-300">
+              {settings.targetLow ?? Number(((settings.hypoThreshold ?? 3.9) + 0.1).toFixed(1))} – {settings.targetHigh ?? 9.9} ммоль/л
+            </span>
+          </div>
+        </div>
+
         {/* Экспорт и импорт Excel (.xlsx) */}
         <div className="space-y-3 pt-4 border-t border-slate-100 dark:border-slate-800">
           <div className="flex items-center justify-between">
@@ -323,10 +412,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 size="md"
                 onClick={() => setShowClearConfirm(true)}
                 disabled={entries.length === 0}
-                className="w-full sm:w-auto shrink-0 border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300 hover:bg-rose-100/70 dark:hover:bg-rose-950/40"
+                className="w-full sm:w-auto shrink-0 whitespace-nowrap border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300 hover:bg-rose-100/70 dark:hover:bg-rose-950/40 flex items-center justify-center gap-2"
               >
-                <Trash2 className="w-4 h-4" />
-                <span>Очистить дневник</span>
+                <Trash2 className="w-4 h-4 shrink-0" />
+                <span className="shrink-0">Очистить дневник</span>
               </Button>
             </div>
           ) : (
@@ -348,15 +437,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     setShowClearConfirm(false);
                     onClose();
                   }}
+                  className="whitespace-nowrap shrink-0 flex items-center justify-center gap-2"
                 >
-                  <Trash2 className="w-4 h-4" />
-                  <span>Да, удалить всё</span>
+                  <Trash2 className="w-4 h-4 shrink-0" />
+                  <span className="shrink-0">Да, удалить всё</span>
                 </Button>
                 <Button
                   type="button"
                   variant="ghost"
                   size="md"
                   onClick={() => setShowClearConfirm(false)}
+                  className="whitespace-nowrap shrink-0"
                 >
                   Отмена
                 </Button>
