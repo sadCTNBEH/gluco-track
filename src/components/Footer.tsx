@@ -15,7 +15,7 @@ export const Footer: React.FC<FooterProps> = ({ onOpenPolicy, onOpenMedical }) =
         <div className="flex flex-col md:flex-row items-center justify-between gap-3 text-slate-500 dark:text-slate-400">
           <div className="flex items-center gap-2 font-medium text-slate-700 dark:text-slate-300">
             <span className="w-2 h-2 rounded-full bg-teal-600 dark:text-teal-400" />
-            <span className="font-semibold">GlucoTrack Pro</span>
+            <span className="font-semibold">GlucoTrack</span>
             <span className="text-slate-300 dark:text-slate-700">|</span>
             <span className="text-slate-500 dark:text-slate-400 text-[11px]">Дневник самоконтроля</span>
           </div>

@@ -160,7 +160,7 @@ async function generateAll() {
 
   // 5. Web App Manifest for iOS & Android
   const manifest = {
-    name: 'GlucoTrack Pro — Дневник самоконтроля диабета',
+    name: 'GlucoTrack — Дневник самоконтроля диабета',
     short_name: 'GlucoTrack',
     description: 'Клинический дневник самоконтроля сахарного диабета: учет глюкозы крови, болюса, базала и ХЕ',
     start_url: '/',

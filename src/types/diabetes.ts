@@ -38,6 +38,8 @@ export interface UserSettings {
   severeHyperThreshold: number; // 13.9
   bolusName?: string; // название болюсного инсулина (по умолчанию 'РинФаст')
   basalName?: string; // название базального инсулина (по умолчанию 'Тресиба')
+  eHbA1c?: number | null; // целевой или лабораторный eHbA1c / HbA1c (%)
+  acr?: number | null; // соотношение альбумин/креатинин в утренней порции мочи (мг/ммоль)
   doctorName?: string;
   doctorNotes?: string;
 }

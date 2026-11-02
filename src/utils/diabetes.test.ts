@@ -247,6 +247,32 @@ test('calculateMonthlyStats: calculates TIR and monthly averages', () => {
   assert.equal(stats.avgDailyTresiba, 14);
 });
 
+test('isDayComplete: correctly requires morning, day, and evening', async () => {
+  const { isDayComplete } = await import('./diabetes.ts');
+
+  // Complete day with morning (08:00), day (13:00), evening (19:00)
+  const fullDay: DiaryEntry[] = [
+    { id: '1', date: '2026-11-01', time: '08:00', glucose: 5.5, carbs: 24, xe: 2, rinFast: 6, tresiba: null, calories: null, notes: 'Завтрак', createdAt: 1 },
+    { id: '2', date: '2026-11-01', time: '13:00', glucose: 6.2, carbs: 36, xe: 3, rinFast: 8, tresiba: null, calories: null, notes: 'Обед', createdAt: 2 },
+    { id: '3', date: '2026-11-01', time: '19:00', glucose: 7.0, carbs: 24, xe: 2, rinFast: 6, tresiba: 14, calories: null, notes: 'Ужин', createdAt: 3 },
+  ];
+  assert.equal(isDayComplete(fullDay), true);
+
+  // Incomplete day: missing lunch (day)
+  const missingLunch: DiaryEntry[] = [
+    { id: '1', date: '2026-11-02', time: '08:00', glucose: 5.5, carbs: 24, xe: 2, rinFast: 6, tresiba: null, calories: null, notes: 'Завтрак', createdAt: 1 },
+    { id: '3', date: '2026-11-02', time: '19:00', glucose: 7.0, carbs: 24, xe: 2, rinFast: 6, tresiba: 14, calories: null, notes: 'Ужин', createdAt: 3 },
+  ];
+  assert.equal(isDayComplete(missingLunch), false);
+
+  // Incomplete day: missing evening
+  const missingEvening: DiaryEntry[] = [
+    { id: '1', date: '2026-11-03', time: '08:00', glucose: 5.5, carbs: 24, xe: 2, rinFast: 6, tresiba: null, calories: null, notes: 'Завтрак', createdAt: 1 },
+    { id: '2', date: '2026-11-03', time: '13:00', glucose: 6.2, carbs: 36, xe: 3, rinFast: 8, tresiba: null, calories: null, notes: 'Обед', createdAt: 2 },
+  ];
+  assert.equal(isDayComplete(missingEvening), false);
+});
+
 test('parseExcelDiary: correctly imports complex Russian diabetes CSV/Excel with summary columns', async () => {
   const { parseExcelDiary } = await import('./excelImport.ts');
 

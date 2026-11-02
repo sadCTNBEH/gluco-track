@@ -285,7 +285,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess, onOpenPolicy 
         </div>
 
         <div className="mt-6 text-center text-[11px] text-slate-500 dark:text-slate-400 font-mono">
-          GlucoTrack Pro © 2026 • Безопасный учет гликемии и инсулинотерапии
+          GlucoTrack © 2026 • Безопасный учет гликемии и инсулинотерапии
         </div>
 
       </div>

@@ -3,6 +3,7 @@ import { DiaryEntry, UserSettings } from '../types/diabetes';
 import {
   evaluateGlucose,
   calculateDayAggregates,
+  calculateDailyInsulinAverages,
   formatDateRussian,
 } from '../utils/diabetes';
 import {
@@ -23,7 +24,7 @@ export const DoctorReportPdf: React.FC<DoctorReportPdfProps> = ({
   settings,
   onUpdateSettings,
 }) => {
-  const [reportPeriod, setReportPeriod] = useState<'7d' | '14d' | '30d' | 'all'>('14d');
+  const [reportPeriod, setReportPeriod] = useState<'7d' | '14d' | '30d' | 'all'>('all');
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
 
   const bolusName = settings.bolusName || 'РинФаст';
@@ -87,9 +88,13 @@ export const DoctorReportPdf: React.FC<DoctorReportPdfProps> = ({
     let highCount = 0;
     let veryHighCount = 0;
     const daysSet = new Set<string>();
+    const daysMap: Record<string, DiaryEntry[]> = {};
 
     for (const e of filteredEntries) {
       daysSet.add(e.date);
+      if (!daysMap[e.date]) daysMap[e.date] = [];
+      daysMap[e.date].push(e);
+
       if (e.glucose !== null && e.glucose > 0) {
         glucoseSum += e.glucose;
         glucoseCount++;
@@ -109,6 +114,9 @@ export const DoctorReportPdf: React.FC<DoctorReportPdfProps> = ({
     const avgG = glucoseCount > 0 ? Number((glucoseSum / glucoseCount).toFixed(1)) : null;
     const hba1c = avgG ? Number(((avgG * 18.05 + 46.7) / 28.7).toFixed(1)) : null;
 
+    // Расчет среднесуточных доз болюса и базала с учетом полных дней (утро, день, вечер)
+    const insulinStats = calculateDailyInsulinAverages(daysMap);
+
     const tirTotal = glucoseCount || 1;
     return {
       activeDays,
@@ -117,9 +125,10 @@ export const DoctorReportPdf: React.FC<DoctorReportPdfProps> = ({
       avgGlucose: avgG,
       estimatedHbA1c: hba1c,
       totalRinFast: Number(totalRinFast.toFixed(1)),
-      avgRinFast: Number((totalRinFast / activeDays).toFixed(1)),
+      avgRinFast: insulinStats.avgDailyRinFast,
       totalTresiba: Number(totalTresiba.toFixed(1)),
-      avgTresiba: Number((totalTresiba / activeDays).toFixed(1)),
+      avgTresiba: insulinStats.avgDailyTresiba,
+      fullDaysCount: insulinStats.fullDaysCount,
       totalCarbs: Math.round(totalCarbs),
       avgCarbs: Math.round(totalCarbs / activeDays),
       totalCalories: Math.round(totalCalories),
@@ -131,7 +140,7 @@ export const DoctorReportPdf: React.FC<DoctorReportPdfProps> = ({
         veryHighPercent: glucoseCount > 0 ? Math.round((veryHighCount / tirTotal) * 100) : 0,
       },
     };
-  }, [filteredEntries]);
+  }, [filteredEntries, settings]);
 
   // Печать / Сохранение в PDF через нативный диалог печати браузера
   const handlePrint = () => {
@@ -252,14 +261,17 @@ export const DoctorReportPdf: React.FC<DoctorReportPdfProps> = ({
               <div>Период: <strong>{reportPeriod === '7d' ? '7 дней' : reportPeriod === '14d' ? '14 дней' : reportPeriod === '30d' ? '30 дней' : 'Весь период'}</strong></div>
               <div>Целевой сахар: <strong>{settings.targetLow} – {settings.targetHigh} ммоль/л</strong></div>
               <div>Сортировка: <strong>{sortOrder === 'newest' ? 'Сначала новые (снизу вверх)' : 'Сначала старые (сверху вниз)'}</strong></div>
+              {settings.acr !== null && settings.acr !== undefined && (
+                <div>ACR (моча): <strong>{settings.acr} мг/ммоль</strong></div>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Сводные показатели за отчетный период (TIR, Средний сахар, Дозы) */}
-        <div className="mb-6 grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs">
+        {/* Сводные показатели за отчетный период (TIR, Средняя глюкоза, eHbA1c, ACR, Дозы) */}
+        <div className="mb-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs">
           <div>
-            <div className="text-slate-500 uppercase text-[10px] font-bold">Средняя гликемия</div>
+            <div className="text-slate-500 text-[10px] font-bold">Средняя глюкоза</div>
             <div className="text-xl font-black text-slate-900 mt-0.5 font-mono">
               {stats.avgGlucose !== null ? `${stats.avgGlucose} ммоль/л` : '—'}
             </div>
@@ -267,30 +279,45 @@ export const DoctorReportPdf: React.FC<DoctorReportPdfProps> = ({
           </div>
 
           <div>
-            <div className="text-slate-500 uppercase text-[10px] font-bold">В норме (целевой диапазон)</div>
+            <div className="text-slate-500 text-[10px] font-bold">Целевой диапазон (TIR)</div>
             <div className="text-xl font-black text-emerald-700 mt-0.5 font-mono">
-              {stats.tir.normalPercent}%
+              TIR: {stats.tir.normalPercent}%
             </div>
             <div className="text-[10px] text-slate-500">
-              Гипо (&lt;3.9): {stats.tir.lowPercent}% | Гипер: {stats.tir.highPercent + stats.tir.veryHighPercent}%
+              Гипо (&lt;{settings.hypoThreshold || 3.9}): {stats.tir.lowPercent}% | Гипер: {stats.tir.highPercent + stats.tir.veryHighPercent}%
             </div>
           </div>
 
           <div>
-            <div className="text-slate-500 uppercase text-[10px] font-bold">Расчетный eHbA1c</div>
+            <div className="text-slate-500 text-[10px] font-bold">eHbA1c</div>
             <div className="text-xl font-black text-blue-800 mt-0.5 font-mono">
-              {stats.estimatedHbA1c !== null ? `${stats.estimatedHbA1c}%` : '—'}
+              {settings.eHbA1c !== null && settings.eHbA1c !== undefined
+                ? `${settings.eHbA1c}%`
+                : (stats.estimatedHbA1c !== null ? `~${stats.estimatedHbA1c}%` : '—')}
             </div>
-            <div className="text-[10px] text-slate-500">Ориентировочно по замерам</div>
+            <div className="text-[10px] text-slate-500">
+              {settings.eHbA1c !== null && settings.eHbA1c !== undefined ? 'Лабораторный / целевой' : 'Ориентировочно (GMI)'}
+            </div>
           </div>
 
           <div>
-            <div className="text-slate-500 uppercase text-[10px] font-bold">Инсулин в среднем/день</div>
+            <div className="text-slate-500 text-[10px] font-bold">ACR (моча)</div>
+            <div className="text-xl font-black text-slate-900 mt-0.5 font-mono">
+              {settings.acr !== null && settings.acr !== undefined ? `${settings.acr} мг/ммоль` : '—'}
+            </div>
+            <div className="text-[10px] text-slate-500">Альбумин/креатинин</div>
+          </div>
+
+          <div>
+            <div className="text-slate-500 text-[10px] font-bold">Инсулин в среднем/день</div>
             <div className="text-base font-black text-slate-900 mt-1 font-mono">
-              {bolusName}: {stats.avgRinFast} ед
+              {bolusName}: {stats.avgRinFast > 0 ? `${stats.avgRinFast} ед` : '—'}
             </div>
             <div className="text-[11px] font-bold text-purple-800 font-mono">
-              {basalName}: {stats.avgTresiba} ед
+              {basalName}: {stats.avgTresiba > 0 ? `${stats.avgTresiba} ед` : '—'}
+            </div>
+            <div className="text-[10px] text-slate-400 mt-0.5">
+              {stats.fullDaysCount > 0 ? `По полным дням: ${stats.fullDaysCount} дн.` : 'Болюс и базал'}
             </div>
           </div>
         </div>

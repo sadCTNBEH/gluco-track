@@ -98,10 +98,10 @@ export const TelemetryBar: React.FC<TelemetryBarProps> = ({
             </div>
           </div>
 
-          {/* Card 2: Доля в целевом диапазоне */}
+          {/* Card 2: Доля в целевом диапазоне (TIR) */}
           <div className="p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-850/60 flex flex-col justify-between space-y-2 shadow-2xs">
             <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-              <span className="font-semibold">В целевом диапазоне</span>
+              <span className="font-semibold">В целевом диапазоне (TIR)</span>
               <div className="w-6 h-6 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
                 <Award className="w-3.5 h-3.5" />
               </div>
@@ -110,7 +110,7 @@ export const TelemetryBar: React.FC<TelemetryBarProps> = ({
             <div>
               <div className="flex items-baseline gap-1">
                 <span className="font-mono text-2xl sm:text-3xl font-extrabold tracking-tight text-emerald-700 dark:text-emerald-400 tabular-nums">
-                  {stats.totalEntries > 0 ? `${percentNormal}%` : '—'}
+                  {stats.totalEntries > 0 ? `TIR: ${percentNormal}%` : '—'}
                 </span>
               </div>
 
@@ -142,7 +142,7 @@ export const TelemetryBar: React.FC<TelemetryBarProps> = ({
           {/* Card 3: Оценочный eHbA1c */}
           <div className="p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-850/60 flex flex-col justify-between space-y-2 shadow-2xs">
             <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-              <span className="font-semibold">Расчетный eHbA1c</span>
+              <span className="font-semibold">{settings.eHbA1c ? 'Лабораторный eHbA1c' : 'Расчетный eHbA1c'}</span>
               <div className="w-6 h-6 rounded-lg bg-sky-500/10 text-sky-600 dark:text-sky-400 flex items-center justify-center">
                 <Target className="w-3.5 h-3.5" />
               </div>
@@ -151,11 +151,11 @@ export const TelemetryBar: React.FC<TelemetryBarProps> = ({
             <div>
               <div className="flex items-baseline gap-1">
                 <span className="font-mono text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white tabular-nums">
-                  {estimatedHbA1c !== null ? `~${estimatedHbA1c}%` : '—'}
+                  {settings.eHbA1c ? `${settings.eHbA1c}%` : (estimatedHbA1c !== null ? `~${estimatedHbA1c}%` : '—')}
                 </span>
               </div>
               <span className="text-[10px] text-slate-400 mt-1 block leading-tight">
-                Ориентировочно (GMI) • не заменяет лабораторию
+                {settings.eHbA1c ? 'Задано в настройках • клинический маркер' : 'Ориентировочно (GMI) • не заменяет лабораторию'}
               </span>
             </div>
           </div>

@@ -12,6 +12,8 @@ export const DEFAULT_SETTINGS: UserSettings = {
   basalName: 'Тресиба',
   doctorName: '',
   doctorNotes: 'Инсулинотерапия: РинФаст (ультракороткий) + Тресиба (базальный сверхдлительный). Целевой диапазон гликемии: 4.0 – 9.9 ммоль/л.',
+  eHbA1c: null,
+  acr: null,
 };
 
 export interface GlucoseEvaluation {
@@ -235,35 +237,84 @@ export function getEntryPeriod(entry: DiaryEntry): 'morning' | 'day' | 'evening'
 }
 
 /**
- * Проверка, является ли день полным (указаны утро, день, вечер и ночь)
+ * Проверка, является ли день полным (указаны утро, день и вечер)
+ * Неполные дни, где пропущено утро, день или вечер, не должны учитываться при расчете среднего суточного инсулина.
  */
 export function isDayComplete(dayEntries: DiaryEntry[]): boolean {
   let hasMorning = false;
   let hasDay = false;
   let hasEvening = false;
-  let hasNight = false;
 
   for (const entry of dayEntries) {
     const period = getEntryPeriod(entry);
     if (period === 'morning') hasMorning = true;
     else if (period === 'day') hasDay = true;
     else if (period === 'evening') hasEvening = true;
-    else if (period === 'night') hasNight = true;
+    else if (period === 'night') {
+      const hour = parseInt((entry.time || '').split(':')[0], 10);
+      if (!isNaN(hour) && (hour >= 20 || hour <= 4)) {
+        hasEvening = true;
+      }
+    }
   }
 
-  return hasMorning && hasDay && hasEvening && hasNight;
+  return hasMorning && hasDay && hasEvening;
 }
 
 /**
- * Расчет статистики за месяц
+ * Расчет среднесуточных доз болюса и базала с учетом полных дней (утро, день, вечер).
+ */
+export function calculateDailyInsulinAverages(daysMap: Record<string, DiaryEntry[]>): {
+  avgDailyRinFast: number;
+  avgDailyTresiba: number;
+  fullDaysCount: number;
+} {
+  const fullDaysEntries = Object.entries(daysMap).filter(([_, dayList]) => isDayComplete(dayList));
+  const fullDaysCount = fullDaysEntries.length;
+
+  if (fullDaysCount > 0) {
+    const fullDaysRinFastSum = fullDaysEntries.reduce((sum, [_, dayList]) => {
+      return sum + dayList.reduce((s, e) => s + (e.rinFast || 0), 0);
+    }, 0);
+    const fullDaysTresibaSum = fullDaysEntries.reduce((sum, [_, dayList]) => {
+      return sum + dayList.reduce((s, e) => s + (e.tresiba || 0), 0);
+    }, 0);
+
+    return {
+      avgDailyRinFast: Number((fullDaysRinFastSum / fullDaysCount).toFixed(1)),
+      avgDailyTresiba: Number((fullDaysTresibaSum / fullDaysCount).toFixed(1)),
+      fullDaysCount,
+    };
+  }
+
+  // Резервный расчет (если ни один день не заполнен всеми 3 приемами пищи)
+  const allDays = Object.values(daysMap);
+  const totalRinFast = allDays.reduce((sum, d) => sum + d.reduce((s, e) => s + (e.rinFast || 0), 0), 0);
+  const totalTresiba = allDays.reduce((sum, d) => sum + d.reduce((s, e) => s + (e.tresiba || 0), 0), 0);
+
+  const daysWithRinFast = allDays.filter((d) => d.some((e) => (e.rinFast || 0) > 0));
+  const daysWithTresiba = allDays.filter((d) => d.some((e) => (e.tresiba || 0) > 0));
+
+  const denomRf = daysWithRinFast.length || allDays.length || 1;
+  const denomTr = daysWithTresiba.length || allDays.length || 1;
+
+  return {
+    avgDailyRinFast: Number((totalRinFast / denomRf).toFixed(1)),
+    avgDailyTresiba: Number((totalTresiba / denomTr).toFixed(1)),
+    fullDaysCount: 0,
+  };
+}
+
+/**
+ * Расчет статистики за месяц (или по всем записям, если monthStr не передан)
  */
 export function calculateMonthlyStats(
   entries: DiaryEntry[],
   monthStr?: string,
   settings?: UserSettings
 ): MonthlyStats {
-  const targetMonth = monthStr || new Date().toISOString().slice(0, 7); // YYYY-MM
-  const monthEntries = entries.filter((e) => e.date.startsWith(targetMonth));
+  const monthEntries = monthStr ? entries.filter((e) => e.date.startsWith(monthStr)) : entries;
+  const targetMonth = monthStr || (entries.length > 0 ? entries[0].date.slice(0, 7) : new Date().toISOString().slice(0, 7));
 
   let glucoseSum = 0;
   let glucoseCount = 0;
@@ -322,21 +373,8 @@ export function calculateMonthlyStats(
     veryHighPercent: glucoseCount > 0 ? Math.round((veryHighCount / tirTotal) * 100) : 0,
   };
 
-  // Расчет среднесуточного болюса (РинФаст) по полным дням (где указаны утро, день, вечер и ночь)
-  const fullDaysEntries = Object.entries(daysMap).filter(([_, dayList]) => isDayComplete(dayList));
-  const fullDaysCount = fullDaysEntries.length;
-
-  let avgDailyRinFast: number;
-  if (fullDaysCount > 0) {
-    const fullDaysRinFastSum = fullDaysEntries.reduce((sum, [_, dayList]) => {
-      return sum + dayList.reduce((s, e) => s + (e.rinFast || 0), 0);
-    }, 0);
-    avgDailyRinFast = Number((fullDaysRinFastSum / fullDaysCount).toFixed(1));
-  } else {
-    const daysWithRinFast = Object.values(daysMap).filter((d) => d.some((e) => (e.rinFast || 0) > 0));
-    const denom = daysWithRinFast.length || activeDaysCount;
-    avgDailyRinFast = Number((totalRinFast / denom).toFixed(1));
-  }
+  // Расчет среднесуточных доз болюса и базала по полным дням (где указаны утро, день и вечер)
+  const insulinStats = calculateDailyInsulinAverages(daysMap);
 
   return {
     month: targetMonth,
@@ -345,15 +383,15 @@ export function calculateMonthlyStats(
     estimatedHbA1c,
     tir,
     totalRinFast: Number(totalRinFast.toFixed(1)),
-    avgDailyRinFast,
+    avgDailyRinFast: insulinStats.avgDailyRinFast,
     totalTresiba: Number(totalTresiba.toFixed(1)),
-    avgDailyTresiba: Number((totalTresiba / activeDaysCount).toFixed(1)),
+    avgDailyTresiba: insulinStats.avgDailyTresiba,
     totalCarbs: Math.round(totalCarbs),
     avgDailyCarbs: Math.round(totalCarbs / activeDaysCount),
     totalCalories: Math.round(totalCalories),
     avgDailyCalories: Math.round(totalCalories / activeDaysCount),
     activeDaysCount: activeDays.size,
-    fullDaysCount,
+    fullDaysCount: insulinStats.fullDaysCount,
   };
 }
 

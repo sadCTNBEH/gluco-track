@@ -62,9 +62,6 @@ export const Header: React.FC<HeaderProps> = ({
                   <span className="text-base font-extrabold tracking-tight text-slate-900 dark:text-white">
                     GlucoTrack
                   </span>
-                  <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.2 rounded bg-teal-500/10 text-teal-700 dark:text-teal-300 border border-teal-500/20">
-                    Pro
-                  </span>
                 </div>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate hidden sm:block leading-none mt-0.5">
                   Дневник самоконтроля гликемии

@@ -1,22 +1,22 @@
-# 🩺 GlucoTrack Pro — Дневник Диабета & Самоконтроля
+# 🩺 GlucoTrack — Дневник Диабета & Самоконтроля
 
 <p align="center">
-  <img src="public/apple-touch-icon.png" alt="GlucoTrack Pro Icon" width="96" height="96" style="border-radius: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);" />
+  <img src="public/apple-touch-icon.png" alt="GlucoTrack Icon" width="96" height="96" style="border-radius: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);" />
 </p>
 
 <p align="center">
   <strong>Современное веб-приложение для ежедневного самоконтроля сахарного диабета</strong><br />
-  Учет гликемии, расчет Хлебных Единиц (ХЕ), дозировки инсулинов, аналитика TIR, экспорт отчетов для врача в PDF, импорт/экспорт Excel (.xlsx) и безопасная авторизация.
+  Учет гликемии, расчет Хлебных Единиц (ХЕ), дозировки инсулинов, аналитика TIR, лабораторные маркеры (eHbA1c и ACR), экспорт отчетов для врача в PDF, импорт/экспорт Excel (.xlsx) и безопасная авторизация.
 </p>
 
 <p align="center">
-  <a href="#-дневник-диабета--самоконтроля-glucotrack-pro">🇷🇺 Документация на русском</a> •
-  <a href="#-glucotrack-pro--diabetes-self-monitoring-diary">🇬🇧 Documentation in English</a>
+  <a href="#-дневник-диабета--самоконтроля-glucotrack">🇷🇺 Документация на русском</a> •
+  <a href="#-glucotrack--diabetes-self-monitoring-diary">🇬🇧 Documentation in English</a>
 </p>
 
 ---
 
-## 🇷🇺 Дневник Диабета & Самоконтроля (GlucoTrack Pro)
+## 🇷🇺 Дневник Диабета & Самоконтроля (GlucoTrack)
 
 ### ✨ Ключевые возможности
 
@@ -26,42 +26,46 @@
    - Моноширинные цифры (`tabular-nums`) для легкого считывания замеров и доз.
    - Плотная и наглядная визуализация без лишнего визуального шума.
 
-2. **📊 Компактная телеметрия здоровья**:
-   - 4 информативные карточки: средний сахар за месяц, расчетный гликированный гемоглобин (`eHbA1c`), время в целевом диапазоне (TIR), суточный расход инсулинов.
-   - Индикация отклонений и клинические диапазоны.
+2. **📊 Компактная телеметрия здоровья (TIR и сводка)**:
+   - 4 информативные карточки: средняя глюкоза за период, расчетный eHbA1c, время в целевом диапазоне (TIR: 100%), суточный расход инсулинов.
+   - Экспресс-индикация отклонений и клинические диапазоны.
 
 3. **🎯 Настраиваемый целевой диапазон сахара**:
    - Возможность задать индивидуальный порог гипогликемии (по умолчанию `≤ 3.9 ммоль/л`).
    - Настройка верхней границы нормы (по умолчанию `≤ 9.9 ммоль/л`).
    - Все графики, расчет TIR и цветовые метки динамически адаптируются под персональные настройки.
 
-4. **💉 Кастомизация названий инсулинов**:
+4. **🧪 Клинические маркеры (eHbA1c и ACR)**:
+   - Поля для ввода лабораторного значения `eHbA1c (%)` и `ACR` (соотношение альбумин/креатинин в утренней порции мочи, мг/ммоль).
+   - Аккуратное отображение в отчете для врача и сводке показателей.
+
+5. **💉 Кастомизация названий инсулинов**:
    - Указание названий препаратов для болюсного (короткого) и базального (продленного) инсулинов (по умолчанию *РинФаст* и *Тресиба*).
    - Препараты отображаются в таблицах, модальных окнах, карточках, графиках и отчете для врача.
 
-5. **⏱️ Точный учет среднесуточного болюса**:
-   - Автоматический расчет суточного расхода болюса только по завершенным дням, где отмечены утро, день, вечер и ночь.
-   - Исключает искажения от единичных замеров и подколок.
+6. **⏱️ Точный учет среднесуточного инсулина по полным дням**:
+   - Автоматический расчет суточного расхода болюса и базала только по дням, где полноценно отмечены все три основных приема пищи (утро, день и вечер).
+   - Исключает искажения от пропущенных приемов пищи и единичных замеров.
 
-6. **📱 PWA и ярлык для iPhone (Home Screen)**:
+7. **📱 PWA и ярлык для iPhone (Home Screen)**:
    - Готовые иконки для устройств Apple (`Apple Touch Icon` 180×180 px), фавиконки в форматах SVG, PNG (16×16, 32×32, 192×192, 512×512) и ICO.
    - Настроенный манифест PWA (`manifest.json`) и поддержка полноэкранного режима веб-приложения на iOS.
 
-7. **📑 Двунаправленный обмен данными (Excel .xlsx и JSON)**:
+8. **📑 Двунаправленный обмен данными (Excel .xlsx и JSON)**:
    - Экспорт всех записей в аккуратную форматированную таблицу Excel (.xlsx) с цветной градацией сахара.
    - Умный импорт из Excel с предпросмотром, распознаванием колонок и поддержкой объединенных строк.
    - Полный бэкап и восстановление настроек и истории замеров в формате JSON.
 
-8. **🩺 Отчет для лечащего врача (PDF / Печать)**:
-   - Клинический протокол с титулом, реквизитами, целевым сахаром и таблицей измерений.
+9. **🩺 Отчет для лечащего врача (PDF / Печать)**:
+   - Клинический протокол с титулом, реквизитами, целевым сахаром, маркерами eHbA1c и ACR, средней глюкозой и таблицей измерений.
    - Настраиваемая сортировка: от старых к новым (хронологическая) или от новых к старым (обратная).
    - Синхронное направление времени внутри каждого дня.
 
-9. **🔐 Защищенная многопользовательская авторизация**:
-   - Вход и регистрация с хэшированием паролей алгоритмом `scrypt` с криптографической солью.
-   - Полная изоляция баз данных пользователей в SQLite.
+10. **🔐 Защищенная многопользовательская авторизация**:
+    - Вход и регистрация с хэшированием паролей алгоритмом `scrypt` с криптографической солью.
+    - Полная изоляция баз данных пользователей в SQLite.
 
-10. **💾 Автоматический бэкап базы данных в 00:00 МСК**:
+11. **💾 Автоматический бэкап базы данных в 00:00 МСК**:
     - База данных SQLite сохраняется на сервере вне контейнера (`./data/glucotrack.db`).
     - Скрипт `backup.sh` обновляет резервную копию каждую полночь по московскому времени.
 
@@ -201,7 +205,7 @@ npm run build
 
 <br />
 
-## 🇬🇧 GlucoTrack Pro — Diabetes Self-Monitoring Diary
+## 🇬🇧 GlucoTrack — Diabetes Self-Monitoring Diary
 
 ### ✨ Key Features
 
@@ -211,8 +215,8 @@ npm run build
    - Monospaced tabular numerals (`tabular-nums`) for rapid reading of blood glucose and insulin dosages.
    - Mobile-first adaptive layout with support for one-handed entry on smartphones.
 
-2. **📊 Compact Health Telemetry**:
-   - 4 summary telemetry cards: 30-day average blood glucose, estimated HbA1c (`eHbA1c`), Time in Range (TIR), and daily insulin breakdown.
+2. **📊 Compact Health Telemetry (TIR Dashboard)**:
+   - 4 summary telemetry cards: average glucose, eHbA1c, Time in Range (TIR: 100%), and daily insulin breakdown.
    - Clear visual status badges for low, target, high, and severe hyperglycemia.
 
 3. **🎯 Customizable Target Glucose Ranges**:
@@ -220,32 +224,36 @@ npm run build
    - Adjustable upper target limit (default `≤ 9.9 mmol/L`).
    - Dynamic recalculation across TIR metrics, charts, tables, and PDF clinical reports.
 
-4. **💉 Personalized Insulin Names**:
+4. **🧪 Clinical Laboratory Biomarkers (eHbA1c & ACR)**:
+   - Dedicated inputs for `eHbA1c (%)` and `ACR` (urine albumin-to-creatinine ratio, mg/mmol).
+   - Clear reporting in doctor PDF summaries and telemetry cards.
+
+5. **💉 Personalized Insulin Names**:
    - Custom naming for bolus (rapid-acting mealtime) and basal (long-acting background) insulins (defaults: *RinFast* and *Tresiba*).
    - Automatically reflected across all dialogs, tables, cards, and reports.
 
-5. **⏱️ Accurate Daily Bolus Consumption**:
-   - Calculates daily bolus averages strictly based on completed days where morning, day, evening, and night entries are all logged.
-   - Prevents distortion from isolated correction doses.
+6. **⏱️ Accurate Daily Insulin Averages Across Full Days**:
+   - Calculates daily bolus and basal averages strictly based on days where morning, day, and evening meals are all recorded.
+   - Eliminates distortion from partial days and isolated correction doses.
 
-6. **📱 PWA & iPhone Home Screen Ready**:
+7. **📱 PWA & iPhone Home Screen Ready**:
    - Crisp Apple Touch Icon (180×180 px), multi-resolution favicons (SVG, PNG 16/32/192/512, ICO).
    - Web App Manifest (`manifest.json`) and iOS standalone full-screen support with safe area insets.
 
-7. **📑 Bidirectional Data Management (Excel .xlsx & JSON)**:
+8. **📑 Bidirectional Data Management (Excel .xlsx & JSON)**:
    - Full export to Microsoft Excel (.xlsx) with color-coded glucose ratings and insulin summaries.
    - Intelligent Excel file import with column auto-matching, delimiter detection, and preview table.
    - Complete JSON backup and restore for data portability and offline storage.
 
-8. **🩺 Doctor's Medical PDF Report**:
-   - Formatted clinical report ready for print or PDF export.
+9. **🩺 Doctor's Medical PDF Report**:
+   - Formatted clinical report ready for print or PDF export with Average Glucose, TIR, eHbA1c, and ACR.
    - Bidirectional date sorting (chronological from oldest to newest, or reverse from newest to oldest) with synchronized time ordering.
 
-9. **🔐 Multi-User Secure Authentication**:
-   - Secure registration and login powered by salted `scrypt` hashing.
-   - Individual, fully isolated SQLite databases for each patient.
+10. **🔐 Multi-User Secure Authentication**:
+    - Secure registration and login powered by salted `scrypt` hashing.
+    - Individual, fully isolated SQLite databases for each patient.
 
-10. **💾 Automated Daily SQLite Backups at 00:00 MSK**:
+11. **💾 Automated Daily SQLite Backups at 00:00 MSK**:
     - Host-level database persistence (`./data/glucotrack.db`).
     - Ready-to-use `backup.sh` script automated via cron.
 

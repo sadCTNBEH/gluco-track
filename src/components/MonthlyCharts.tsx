@@ -228,17 +228,17 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({
           </div>
         </div>
 
-        {/* Доля в целевом диапазоне */}
+        {/* Доля в целевом диапазоне (TIR) */}
         <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-1">
           <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-            <span className="font-semibold">В норме ({targetLow}–{targetHigh})</span>
+            <span className="font-semibold">В норме (TIR)</span>
             <Award className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
           </div>
           <div className="text-2xl font-bold text-emerald-700 dark:text-emerald-400 font-mono">
-            {stats.tir.normalPercent}%
+            TIR: {stats.tir.normalPercent}%
           </div>
           <div className="text-xs text-slate-400">
-            Доля измерений в целевом диапазоне
+            Доля измерений в целевом диапазоне ({targetLow}–{targetHigh} ммоль/л)
           </div>
         </div>
 
