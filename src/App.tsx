@@ -20,6 +20,8 @@ import { PrivacyPolicyModal } from './components/PrivacyPolicyModal';
 import { ConfirmDeleteDayModal } from './components/ConfirmDeleteDayModal';
 import { CookieBanner } from './components/CookieBanner';
 import { Footer } from './components/Footer';
+import { TelemetryBar } from './components/TelemetryBar';
+import { Theme, getInitialTheme, applyTheme } from './utils/theme';
 import { api, AuthUser } from './api/client';
 import { Plus, Award, Loader2 } from 'lucide-react';
 
@@ -27,8 +29,18 @@ const STORAGE_KEY_ENTRIES = 'diabetes_diary_entries_v1';
 const STORAGE_KEY_SETTINGS = 'diabetes_diary_settings_v1';
 
 export default function App() {
+  const [theme, setTheme] = useState<Theme>(getInitialTheme);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [authChecking, setAuthChecking] = useState(true);
+
+  // Применяем тему оформления при монтировании и изменении
+  useEffect(() => {
+    applyTheme(theme);
+  }, [theme]);
+
+  const handleToggleTheme = () => {
+    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+  };
 
   const [entries, setEntries] = useState<DiaryEntry[]>([]);
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
@@ -288,7 +300,7 @@ export default function App() {
   const recentStats = calculateMonthlyStats(entries);
 
   return (
-    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans transition-colors flex flex-col">
+    <div className="min-h-screen bg-slate-100/70 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans transition-colors duration-200 flex flex-col selection:bg-teal-500/20 selection:text-teal-900 dark:selection:text-teal-200">
       {/* Шапка приложения */}
       <Header
         activeTab={activeTab}
@@ -304,42 +316,16 @@ export default function App() {
         onLogout={handleLogout}
         username={user.username}
         entriesCount={entries.length}
+        theme={theme}
+        onToggleTheme={handleToggleTheme}
       />
 
-      {/* Быстрая информационная плашка состояния */}
-      <div className="print:hidden bg-white/80 dark:bg-slate-900/80 border-b border-slate-200/80 dark:border-slate-800/80 py-2.5 px-4 sm:px-6">
-        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-300">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Пациент: <strong>{settings.patientName || user.username}</strong></span>
-            </div>
-            <span className="text-slate-300 dark:text-slate-700">|</span>
-            <div className="hidden sm:flex items-center gap-1.5 text-slate-500">
-              <span>Цель гликемии: <strong>{settings.targetLow} – {settings.targetHigh} ммоль/л</strong></span>
-            </div>
-            <span className="hidden sm:inline text-slate-300 dark:text-slate-700">|</span>
-            <div className="hidden md:flex items-center gap-1.5 text-slate-500">
-              <span>ХЕ: <strong>1 ХЕ = {settings.xeRatio} г углеводов</strong></span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {recentStats.avgGlucose !== null && (
-              <div className="flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium">
-                <span>Ср. сахар:</span>
-                <strong className="text-teal-600 dark:text-teal-400 font-mono">
-                  {recentStats.avgGlucose} ммоль/л
-                </strong>
-              </div>
-            )}
-            <div className="flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 text-emerald-700 dark:text-emerald-300 font-medium">
-              <Award className="w-3.5 h-3.5" />
-              <span>TIR: <strong>{recentStats.tir.normalPercent}% в норме</strong></span>
-            </div>
-          </div>
-        </div>
-      </div>
+      {/* Клинический телеметрический статус-бар */}
+      <TelemetryBar
+        entries={entries}
+        settings={settings}
+        patientName={settings.patientName || user.username}
+      />
 
       {/* Основной контент */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
@@ -413,7 +399,7 @@ export default function App() {
           setEditingEntry(null);
           setIsEntryModalOpen(true);
         }}
-        className="print:hidden md:hidden fixed right-5 bottom-6 z-40 w-14 h-14 rounded-full bg-teal-600 active:bg-teal-700 text-white shadow-xl shadow-teal-600/40 flex items-center justify-center transition-transform active:scale-95 cursor-pointer"
+        className="print:hidden md:hidden fixed right-5 bottom-6 z-40 w-14 h-14 rounded-full bg-gradient-to-tr from-teal-600 to-emerald-500 active:scale-90 text-white shadow-xl shadow-teal-500/35 border border-white/20 flex items-center justify-center transition-transform cursor-pointer"
         aria-label="Быстро добавить замер"
       >
         <Plus className="w-7 h-7" />

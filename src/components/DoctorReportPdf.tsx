@@ -130,33 +130,33 @@ export const DoctorReportPdf: React.FC<DoctorReportPdfProps> = ({
   return (
     <div className="space-y-6">
       {/* Панель управления отчетом (скрывается при печати) */}
-      <div className="print:hidden bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="print:hidden bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-5 sm:p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <FileText className="w-5 h-5 text-teal-600" />
+          <h2 className="text-base sm:text-lg font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
+            <FileText className="w-5 h-5 text-teal-600 dark:text-teal-400" />
             Медицинский отчет самоконтроля для врача
           </h2>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
             Готовая форма для отправки эндокринологу или сохранения в PDF (формат А4)
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
           {/* Период отчета */}
-          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs">
+          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl text-xs border border-slate-200/60 dark:border-slate-700/60">
             {[
               { id: '7d', label: '7 дней' },
-              { id: '14d', label: '14 дней (стандарт)' },
+              { id: '14d', label: '14 дней' },
               { id: '30d', label: '30 дней' },
-              { id: 'all', label: 'Все записи' },
+              { id: 'all', label: 'Все' },
             ].map((p) => (
               <button
                 key={p.id}
                 onClick={() => setReportPeriod(p.id as any)}
-                className={`px-3 py-1.5 rounded-lg font-medium transition ${
+                className={`px-3 py-1.5 rounded-xl font-bold transition cursor-pointer ${
                   reportPeriod === p.id
-                    ? 'bg-white dark:bg-slate-700 text-teal-700 dark:text-teal-300 shadow-xs font-bold'
-                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
+                    ? 'bg-white dark:bg-slate-700 text-teal-600 dark:text-teal-300 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 {p.label}
@@ -167,20 +167,20 @@ export const DoctorReportPdf: React.FC<DoctorReportPdfProps> = ({
           {/* Кнопка Экспорт в CSV */}
           <button
             onClick={handleExportCSV}
-            className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold hover:bg-slate-50 transition flex items-center gap-1.5"
+            className="px-3.5 py-2 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold hover:bg-slate-50 dark:hover:bg-slate-750 transition flex items-center gap-1.5 cursor-pointer"
             title="Выгрузить в таблицу Excel/CSV"
           >
-            <FileDown className="w-4 h-4 text-emerald-600" />
-            Excel/CSV
+            <FileDown className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            <span>Excel / CSV</span>
           </button>
 
           {/* Главная кнопка Печать / Сохранить в PDF */}
           <button
             onClick={handlePrint}
-            className="px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 active:bg-teal-700 text-white text-xs font-bold shadow-md shadow-teal-500/20 transition flex items-center gap-2"
+            className="px-5 py-2 rounded-2xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 active:scale-97 text-white text-xs font-bold shadow-md shadow-teal-500/25 transition flex items-center gap-2 cursor-pointer"
           >
             <Printer className="w-4 h-4" />
-            Печать / Сохранить в PDF
+            <span>Печать / Сохранить в PDF</span>
           </button>
         </div>
       </div>
