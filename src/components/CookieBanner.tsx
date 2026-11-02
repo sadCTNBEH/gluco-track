@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Cookie, ShieldCheck, X } from 'lucide-react';
+import { Cookie, ShieldCheck } from 'lucide-react';
+import { Button } from './ui/Button';
 
 interface CookieBannerProps {
   onOpenPolicy: () => void;
@@ -14,8 +15,7 @@ export const CookieBanner: React.FC<CookieBannerProps> = ({ onOpenPolicy }) => {
     try {
       const accepted = localStorage.getItem(STORAGE_KEY);
       if (!accepted) {
-        // Небольшая задержка для плавного появления
-        const timer = setTimeout(() => setVisible(true), 600);
+        const timer = setTimeout(() => setVisible(true), 500);
         return () => clearTimeout(timer);
       }
     } catch {
@@ -37,19 +37,19 @@ export const CookieBanner: React.FC<CookieBannerProps> = ({ onOpenPolicy }) => {
       aria-label="Уведомление об использовании файлов cookie"
       className="print:hidden fixed bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:max-w-md z-50 animate-fadeIn"
     >
-      <div className="bg-slate-900/95 dark:bg-slate-900/95 backdrop-blur-md text-white p-4 sm:p-5 rounded-2xl shadow-2xl border border-slate-700/80 flex flex-col gap-3">
+      <div className="bg-slate-900 text-white dark:bg-slate-900 border border-slate-800 p-4 sm:p-5 rounded-2xl shadow-xl flex flex-col gap-3.5">
         
         <div className="flex items-start gap-3">
-          <div className="w-8 h-8 rounded-xl bg-teal-500/20 text-teal-400 flex items-center justify-center shrink-0 mt-0.5">
+          <div className="w-8 h-8 rounded-lg bg-teal-500/10 text-teal-400 border border-teal-500/20 flex items-center justify-center shrink-0 mt-0.5">
             <Cookie className="w-4 h-4" />
           </div>
-          <div className="space-y-1 text-xs text-slate-300">
-            <p className="font-bold text-white text-xs flex items-center gap-1.5">
-              <span>Файлы cookie и локальное хранилище</span>
+          <div className="space-y-1 text-xs">
+            <p className="font-semibold text-white text-xs flex items-center gap-1.5">
+              <span>Файлы cookie и хранилище данных</span>
               <ShieldCheck className="w-3.5 h-3.5 text-teal-400" />
             </p>
-            <p className="text-[11px] leading-relaxed text-slate-400">
-              Этот сайт использует файлы cookie и LocalStorage исключительно для поддержания защищенной сессии авторизации и надежного сохранения замеров в соответствии с{' '}
+            <p className="text-[11px] leading-relaxed text-slate-300">
+              Сервис использует файлы cookie и LocalStorage исключительно для безопасной сессии авторизации и надежного сохранения замеров в соответствии с{' '}
               <button
                 type="button"
                 onClick={onOpenPolicy}
@@ -61,21 +61,22 @@ export const CookieBanner: React.FC<CookieBannerProps> = ({ onOpenPolicy }) => {
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-800">
+        <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
           <button
             type="button"
             onClick={onOpenPolicy}
-            className="px-3 py-1.5 text-xs text-slate-400 hover:text-white transition cursor-pointer"
+            className="px-3 py-2 text-xs text-slate-400 hover:text-white transition-colors cursor-pointer min-h-[38px] flex items-center"
           >
             Подробнее
           </button>
-          <button
+          <Button
             type="button"
+            variant="primary"
+            size="sm"
             onClick={handleAccept}
-            className="px-4 py-1.5 bg-teal-600 hover:bg-teal-500 active:bg-teal-700 text-white font-bold text-xs rounded-xl shadow-md transition cursor-pointer"
           >
             Принять и продолжить
-          </button>
+          </Button>
         </div>
 
       </div>

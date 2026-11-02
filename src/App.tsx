@@ -6,7 +6,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { DiaryEntry, UserSettings } from './types/diabetes';
 import { DEFAULT_SETTINGS, calculateMonthlyStats } from './utils/diabetes';
-import { generateSampleData } from './data/sampleData';
 import { Header, ActiveTab, ViewMode } from './components/Header';
 import { DiaryTable } from './components/DiaryTable';
 import { MobileCardView } from './components/MobileCardView';
@@ -23,7 +22,7 @@ import { Footer } from './components/Footer';
 import { TelemetryBar } from './components/TelemetryBar';
 import { Theme, getInitialTheme, applyTheme } from './utils/theme';
 import { api, AuthUser } from './api/client';
-import { Plus, Award, Loader2 } from 'lucide-react';
+import { Plus, Loader2 } from 'lucide-react';
 
 const STORAGE_KEY_ENTRIES = 'diabetes_diary_entries_v1';
 const STORAGE_KEY_SETTINGS = 'diabetes_diary_settings_v1';
@@ -216,16 +215,6 @@ export default function App() {
     }
   };
 
-  const handleResetToSample = async () => {
-    const samples = generateSampleData();
-    setEntries(samples);
-    try {
-      await api.importEntries(samples, true);
-    } catch (err) {
-      console.error('Ошибка загрузки демо-данных на сервер:', err);
-    }
-  };
-
   const handleClearAll = async () => {
     setEntries([]);
     localStorage.removeItem(STORAGE_KEY_ENTRIES);
@@ -300,7 +289,7 @@ export default function App() {
   const recentStats = calculateMonthlyStats(entries);
 
   return (
-    <div className="min-h-screen bg-slate-100/70 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans transition-colors duration-200 flex flex-col selection:bg-teal-500/20 selection:text-teal-900 dark:selection:text-teal-200">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans transition-colors duration-200 flex flex-col selection:bg-teal-500/20 selection:text-teal-900 dark:selection:text-teal-200">
       {/* Шапка приложения */}
       <Header
         activeTab={activeTab}
@@ -312,7 +301,6 @@ export default function App() {
           setIsEntryModalOpen(true);
         }}
         onSettingsClick={() => setIsSettingsModalOpen(true)}
-        onExcelImportClick={() => setIsExcelModalOpen(true)}
         onLogout={handleLogout}
         username={user.username}
         entriesCount={entries.length}
@@ -395,14 +383,15 @@ export default function App() {
 
       {/* Плавающая кнопка быстрого добавления (FAB) для мобильных телефонов */}
       <button
+        type="button"
         onClick={() => {
           setEditingEntry(null);
           setIsEntryModalOpen(true);
         }}
-        className="print:hidden md:hidden fixed right-5 bottom-6 z-40 w-14 h-14 rounded-full bg-gradient-to-tr from-teal-600 to-emerald-500 active:scale-90 text-white shadow-xl shadow-teal-500/35 border border-white/20 flex items-center justify-center transition-transform cursor-pointer"
+        className="print:hidden md:hidden fixed right-5 bottom-6 z-40 w-14 h-14 rounded-full bg-teal-600 hover:bg-teal-700 active:bg-teal-800 text-white shadow-lg border border-teal-500/30 flex items-center justify-center transition-all cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-500"
         aria-label="Быстро добавить замер"
       >
-        <Plus className="w-7 h-7" />
+        <Plus className="w-6 h-6" />
       </button>
 
       {/* Модальное окно добавления/редактирования записи */}
@@ -429,7 +418,6 @@ export default function App() {
           await api.importEntries(imported, false);
         }}
         onOpenExcelImport={() => setIsExcelModalOpen(true)}
-        onResetToSample={handleResetToSample}
         onClearAll={handleClearAll}
       />
 

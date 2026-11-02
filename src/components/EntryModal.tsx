@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { DiaryEntry } from '../types/diabetes';
 import { evaluateGlucose, calculateXE } from '../utils/diabetes';
-import { X, Check, Activity, Utensils, Syringe, Flame, Clock, Calendar, AlertCircle, Sparkles } from 'lucide-react';
+import { X, Check, Activity, Utensils, Syringe, Moon, Flame, Clock, Calendar, AlertCircle } from 'lucide-react';
 
 interface EntryModalProps {
   isOpen: boolean;
@@ -10,6 +10,17 @@ interface EntryModalProps {
   initialEntry?: DiaryEntry | null;
   xeRatio?: number;
 }
+
+const CONTEXT_TAGS = [
+  { id: 'fasting', label: 'Натощак' },
+  { id: 'breakfast', label: 'Завтрак' },
+  { id: 'lunch', label: 'Обед' },
+  { id: 'dinner', label: 'Ужин' },
+  { id: 'snack', label: 'Перекус' },
+  { id: 'bedtime', label: 'На ночь' },
+  { id: 'correction', label: 'Коррекция (ДПС)' },
+  { id: 'other', label: 'Другое' },
+] as const;
 
 export const EntryModal: React.FC<EntryModalProps> = ({
   isOpen,
@@ -29,6 +40,8 @@ export const EntryModal: React.FC<EntryModalProps> = ({
   const [notes, setNotes] = useState('');
   const [tag, setTag] = useState<DiaryEntry['tag']>('other');
   const [manualXe, setManualXe] = useState(false);
+
+  const glucoseInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (initialEntry) {
@@ -64,6 +77,16 @@ export const EntryModal: React.FC<EntryModalProps> = ({
       setManualXe(false);
     }
   }, [initialEntry, isOpen]);
+
+  // Handle ESC key to close modal
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   // Автоматический пересчет ХЕ при вводе углеводов
   const handleCarbsChange = (val: string) => {
@@ -117,27 +140,35 @@ export const EntryModal: React.FC<EntryModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-md animate-fadeIn">
-      <div className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200/90 dark:border-slate-800/90 overflow-hidden flex flex-col max-h-[92vh]">
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/60 transition-opacity"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="entry-modal-title"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-t-2xl sm:rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xl overflow-hidden flex flex-col max-h-[92vh] sm:max-h-[88vh] animate-fadeIn">
         
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200/80 dark:border-slate-800/80 bg-slate-50/80 dark:bg-slate-800/50 backdrop-blur-md">
+        <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-teal-600 to-emerald-500 text-white flex items-center justify-center shadow-md shadow-teal-500/25">
+            <div className="w-9 h-9 rounded-xl bg-teal-600 text-white flex items-center justify-center shrink-0">
               <Activity className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base sm:text-lg font-black tracking-tight text-slate-900 dark:text-white">
-                {initialEntry ? 'Редактировать измерение' : 'Новое измерение в дневник'}
+              <h3 id="entry-modal-title" className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
+                {initialEntry ? 'Редактировать запись' : 'Новая запись в дневник'}
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Сахар, инсулин РинФаст / Тресиба, углеводы и ХЕ
+                Учет глюкозы, инсулина, углеводов и ХЕ
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-200/60 dark:hover:bg-slate-800 transition cursor-pointer"
+            className="p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center"
             aria-label="Закрыть"
           >
             <X className="w-5 h-5" />
@@ -145,33 +176,38 @@ export const EntryModal: React.FC<EntryModalProps> = ({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-5 sm:p-6 overflow-y-auto space-y-5">
+        <form onSubmit={handleSubmit} className="p-5 sm:p-6 overflow-y-auto space-y-4 text-xs sm:text-sm">
           
           {/* Дата и Время */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5 flex items-center gap-1.5">
-                <Calendar className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" /> Дата *
+              <label htmlFor="entry-date" className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                Дата *
               </label>
               <input
+                id="entry-date"
                 type="date"
                 required
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/90 text-slate-900 dark:text-white text-xs sm:text-sm font-mono focus:ring-2 focus:ring-teal-500/40 focus:border-teal-500 outline-none transition"
+                className="w-full h-11 px-3.5 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
               />
             </div>
+
             <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5 flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" /> Время *
+              <label htmlFor="entry-time" className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-slate-400" />
+                Время *
               </label>
               <div className="flex gap-2">
                 <input
+                  id="entry-time"
                   type="time"
                   required
                   value={time}
                   onChange={(e) => setTime(e.target.value)}
-                  className="flex-1 px-3.5 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/90 text-slate-900 dark:text-white text-xs sm:text-sm font-mono focus:ring-2 focus:ring-teal-500/40 focus:border-teal-500 outline-none transition"
+                  className="flex-1 h-11 px-3.5 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
                 />
                 <button
                   type="button"
@@ -181,8 +217,7 @@ export const EntryModal: React.FC<EntryModalProps> = ({
                     const mm = String(now.getMinutes()).padStart(2, '0');
                     setTime(`${hh}:${mm}`);
                   }}
-                  className="px-3 py-2 text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-2xl border border-slate-200/60 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer"
-                  title="Установить текущее время"
+                  className="h-11 px-3.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-semibold hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer min-w-[64px]"
                 >
                   Сейчас
                 </button>
@@ -190,30 +225,21 @@ export const EntryModal: React.FC<EntryModalProps> = ({
             </div>
           </div>
 
-          {/* Контекст измерения (чипы) */}
+          {/* Контекст измерения */}
           <div>
-            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
               Контекст измерения
             </label>
             <div className="flex flex-wrap gap-1.5">
-              {[
-                { id: 'fasting', label: 'Натощак' },
-                { id: 'breakfast', label: 'Завтрак' },
-                { id: 'lunch', label: 'Обед' },
-                { id: 'dinner', label: 'Ужин' },
-                { id: 'snack', label: 'Перекус' },
-                { id: 'bedtime', label: 'На ночь' },
-                { id: 'correction', label: 'Коррекция (ДПС)' },
-                { id: 'other', label: 'Другое' },
-              ].map((item) => (
+              {CONTEXT_TAGS.map((item) => (
                 <button
                   key={item.id}
                   type="button"
                   onClick={() => setTag(item.id as any)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer min-h-[36px] ${
                     tag === item.id
-                      ? 'bg-teal-600 text-white shadow-sm shadow-teal-600/30'
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                      ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
                   }`}
                 >
                   {item.label}
@@ -222,32 +248,36 @@ export const EntryModal: React.FC<EntryModalProps> = ({
             </div>
           </div>
 
-          {/* Глюкоза и Автоматическая клиническая оценка */}
-          <div className="p-4 rounded-3xl bg-slate-50/90 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800/80 space-y-2">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
-                <Activity className="w-4 h-4 text-teal-500" /> Глюкоза крови (ммоль/л)
+          {/* Глюкоза */}
+          <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <label htmlFor="entry-glucose" className="text-xs font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                <Activity className="w-4 h-4 text-teal-600" />
+                Глюкоза крови (ммоль/л)
               </label>
+
               {glucoseEval && (
-                <div className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${glucoseEval.badgeClass} flex items-center gap-1.5 animate-fadeIn`}>
-                  <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
-                  <span>Статус: <strong>{glucoseEval.shortLabel}</strong></span>
+                <div className={`px-2 py-0.5 rounded text-xs font-semibold border ${glucoseEval.badgeClass} flex items-center gap-1`}>
+                  <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0" />
+                  <span>{glucoseEval.shortLabel}</span>
                 </div>
               )}
             </div>
 
             <div className="relative">
               <input
+                id="entry-glucose"
+                ref={glucoseInputRef}
                 type="number"
                 step="0.1"
                 min="0"
                 max="45"
-                placeholder="например 5.6"
+                placeholder="Например: 5.8"
                 value={glucoseStr}
                 onChange={(e) => setGlucoseStr(e.target.value)}
-                className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono text-xl font-extrabold focus:ring-2 focus:ring-teal-500/40 focus:border-teal-500 outline-none transition"
+                className="w-full h-12 px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-mono text-xl font-bold focus:outline-none focus:ring-2 focus:ring-teal-500"
               />
-              <span className="absolute right-4 top-3.5 text-xs font-mono font-bold text-slate-400">
+              <span className="absolute right-4 top-3.5 text-xs text-slate-400 font-mono pointer-events-none">
                 ммоль/л
               </span>
             </div>
@@ -258,22 +288,25 @@ export const EntryModal: React.FC<EntryModalProps> = ({
                 {glucoseEval.description}
               </p>
             ) : (
-              <p className="text-[11px] text-slate-400">
-                Клиническая шкала: &lt;3.9 (Низкий), 4.0–9.9 (Целевой/Норма), 10.0–13.9 (Высокий), &gt;13.9 (Критический).
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Целевой диапазон нормы: 4.0 – 9.9 ммоль/л. Значения ниже 3.9 ммоль/л считаются гипогликемией.
               </p>
             )}
           </div>
 
-          {/* Инсулины: РинФаст и Тресиба */}
+          {/* Инсулины: РинФаст и Тресиба с исправленными подписями кнопок */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             
-            {/* РинФаст (ультракороткий болюс) */}
-            <div className="p-4 rounded-3xl bg-blue-500/10 dark:bg-blue-950/20 border border-blue-500/20 space-y-2">
-              <label className="block text-xs font-bold uppercase tracking-wider text-blue-900 dark:text-blue-300 flex items-center gap-1.5">
-                <Syringe className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" /> РинФаст (болюс)
+            {/* РинФаст (болюс) */}
+            <div className="p-3.5 rounded-xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/80 dark:border-blue-900/60 space-y-2">
+              <label htmlFor="entry-rinfast" className="block text-xs font-semibold text-blue-900 dark:text-blue-300 flex items-center gap-1.5">
+                <Syringe className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                РинФаст (болюс на еду/ДПС)
               </label>
+
               <div className="relative">
                 <input
+                  id="entry-rinfast"
                   type="number"
                   step="0.5"
                   min="0"
@@ -281,34 +314,42 @@ export const EntryModal: React.FC<EntryModalProps> = ({
                   placeholder="0"
                   value={rinFastStr}
                   onChange={(e) => setRinFastStr(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-2xl border border-blue-200 dark:border-blue-900/60 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono font-bold text-base focus:ring-2 focus:ring-blue-500/40 outline-none"
+                  className="w-full h-11 px-3 py-2 rounded-lg border border-blue-300 dark:border-blue-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-mono font-bold text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
-                <span className="absolute right-3.5 top-3 text-xs font-mono font-bold text-blue-600 dark:text-blue-400">
+                <span className="absolute right-3.5 top-3 text-xs font-mono font-bold text-blue-700 dark:text-blue-300 pointer-events-none">
                   ЕД
                 </span>
               </div>
-              {/* Быстрые пресеты доз */}
-              <div className="flex gap-1">
-                {[2, 4, 6, 8, 10].map((num) => (
-                  <button
-                    key={num}
-                    type="button"
-                    onClick={() => setRinFastStr(String(num))}
-                    className="flex-1 py-1 text-[11px] font-mono font-bold bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-300 rounded-xl border border-blue-200/80 dark:border-blue-900 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition cursor-pointer"
-                  >
-                    +{num}
-                  </button>
-                ))}
+
+              {/* Пресеты доз — теперь четко подписаны как значение, а не инкремент */}
+              <div className="space-y-1">
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Быстрый выбор дозы:</span>
+                <div className="flex gap-1">
+                  {[2, 4, 6, 8, 10].map((num) => (
+                    <button
+                      key={num}
+                      type="button"
+                      onClick={() => setRinFastStr(String(num))}
+                      className="flex-1 py-1.5 text-xs font-mono font-semibold bg-white dark:bg-slate-800 text-blue-700 dark:text-blue-300 rounded border border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition cursor-pointer min-h-[34px]"
+                      title={`Установить дозу ${num} ед`}
+                    >
+                      {num} ед
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
-            {/* Тресиба (базальный продленный) */}
-            <div className="p-4 rounded-3xl bg-purple-500/10 dark:bg-purple-950/20 border border-purple-500/20 space-y-2">
-              <label className="block text-xs font-bold uppercase tracking-wider text-purple-900 dark:text-purple-300 flex items-center gap-1.5">
-                <Syringe className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" /> Тресиба (базал)
+            {/* Тресиба (базал) */}
+            <div className="p-3.5 rounded-xl bg-purple-50/50 dark:bg-purple-950/20 border border-purple-200/80 dark:border-purple-900/60 space-y-2">
+              <label htmlFor="entry-tresiba" className="block text-xs font-semibold text-purple-900 dark:text-purple-300 flex items-center gap-1.5">
+                <Moon className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                Тресиба (базальный на ночь)
               </label>
+
               <div className="relative">
                 <input
+                  id="entry-tresiba"
                   type="number"
                   step="0.5"
                   min="0"
@@ -316,24 +357,29 @@ export const EntryModal: React.FC<EntryModalProps> = ({
                   placeholder="0"
                   value={tresibaStr}
                   onChange={(e) => setTresibaStr(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-2xl border border-purple-200 dark:border-purple-900/60 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono font-bold text-base focus:ring-2 focus:ring-purple-500/40 outline-none"
+                  className="w-full h-11 px-3 py-2 rounded-lg border border-purple-300 dark:border-purple-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-mono font-bold text-base focus:outline-none focus:ring-2 focus:ring-purple-500"
                 />
-                <span className="absolute right-3.5 top-3 text-xs font-mono font-bold text-purple-600 dark:text-purple-400">
+                <span className="absolute right-3.5 top-3 text-xs font-mono font-bold text-purple-700 dark:text-purple-300 pointer-events-none">
                   ЕД
                 </span>
               </div>
-              {/* Быстрые пресеты доз */}
-              <div className="flex gap-1">
-                {[12, 14, 16, 18, 20].map((num) => (
-                  <button
-                    key={num}
-                    type="button"
-                    onClick={() => setTresibaStr(String(num))}
-                    className="flex-1 py-1 text-[11px] font-mono font-bold bg-white dark:bg-slate-800 text-purple-600 dark:text-purple-300 rounded-xl border border-purple-200/80 dark:border-purple-900 hover:bg-purple-50 dark:hover:bg-purple-950/40 transition cursor-pointer"
-                  >
-                    {num}
-                  </button>
-                ))}
+
+              {/* Пресеты доз — теперь четко подписаны как значение, а не инкремент */}
+              <div className="space-y-1">
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Быстрый выбор дозы:</span>
+                <div className="flex gap-1">
+                  {[12, 14, 16, 18, 20].map((num) => (
+                    <button
+                      key={num}
+                      type="button"
+                      onClick={() => setTresibaStr(String(num))}
+                      className="flex-1 py-1.5 text-xs font-mono font-semibold bg-white dark:bg-slate-800 text-purple-700 dark:text-purple-300 rounded border border-purple-200 dark:border-purple-800 hover:bg-purple-50 dark:hover:bg-purple-950/40 transition cursor-pointer min-h-[34px]"
+                      title={`Установить дозу ${num} ед`}
+                    >
+                      {num} ед
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -344,121 +390,105 @@ export const EntryModal: React.FC<EntryModalProps> = ({
             
             {/* Углеводы */}
             <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5 flex items-center gap-1.5">
-                <Utensils className="w-3.5 h-3.5 text-amber-500" /> Углеводы (г)
+              <label htmlFor="entry-carbs" className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1.5">
+                <Utensils className="w-3.5 h-3.5 text-amber-500" />
+                Углеводы (г)
               </label>
               <div className="relative">
                 <input
+                  id="entry-carbs"
                   type="number"
                   step="1"
                   min="0"
                   placeholder="0"
                   value={carbsStr}
                   onChange={(e) => handleCarbsChange(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono font-semibold text-xs sm:text-sm focus:ring-2 focus:ring-teal-500/40 outline-none"
+                  className="w-full h-11 px-3.5 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
                 />
-                <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-mono">г</span>
+                <span className="absolute right-3.5 top-3 text-xs text-slate-400 font-mono pointer-events-none">г</span>
               </div>
             </div>
 
             {/* ХЕ (авто: углев / 12) */}
             <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="entry-xe" className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                   ХЕ (÷{xeRatio})
                 </label>
                 {carbsStr && (
-                  <span className="text-[10px] text-teal-600 dark:text-teal-400 font-bold">
-                    авто
+                  <span className="text-xs text-teal-700 dark:text-teal-400 font-semibold">
+                    {manualXe ? 'вручную' : 'авто'}
                   </span>
                 )}
               </div>
               <div className="relative">
                 <input
+                  id="entry-xe"
                   type="number"
                   step="0.1"
                   min="0"
                   placeholder="0.0"
                   value={xeStr}
                   onChange={(e) => handleXeChange(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-2xl border border-teal-500/30 dark:border-teal-500/30 bg-teal-500/10 dark:bg-teal-950/20 text-slate-900 dark:text-white font-mono font-extrabold text-xs sm:text-sm focus:ring-2 focus:ring-teal-500/40 outline-none"
+                  className="w-full h-11 px-3.5 py-2 rounded-lg border border-teal-300 dark:border-teal-700 bg-teal-50/50 dark:bg-teal-950/30 text-slate-900 dark:text-slate-100 font-mono font-bold text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
                 />
-                <span className="absolute right-3 top-2.5 text-xs text-teal-600 dark:text-teal-400 font-bold">ХЕ</span>
+                <span className="absolute right-3.5 top-3 text-xs text-teal-700 dark:text-teal-400 font-mono font-bold pointer-events-none">ХЕ</span>
               </div>
             </div>
 
             {/* Калории */}
             <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5 flex items-center gap-1.5">
-                <Flame className="w-3.5 h-3.5 text-rose-500" /> Калории (ккал)
+              <label htmlFor="entry-calories" className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1.5">
+                <Flame className="w-3.5 h-3.5 text-rose-500" />
+                Калории (ккал)
               </label>
               <div className="relative">
                 <input
+                  id="entry-calories"
                   type="number"
                   step="5"
                   min="0"
                   placeholder="0"
                   value={caloriesStr}
                   onChange={(e) => setCaloriesStr(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono font-semibold text-xs sm:text-sm focus:ring-2 focus:ring-teal-500/40 outline-none"
+                  className="w-full h-11 px-3.5 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
                 />
-                <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-mono">ккал</span>
+                <span className="absolute right-3.5 top-3 text-xs text-slate-400 font-mono pointer-events-none">ккал</span>
               </div>
             </div>
 
           </div>
 
-          {/* Еда / комментарии */}
+          {/* Примечания */}
           <div>
-            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
-              Еда / активность / примечания
+            <label htmlFor="entry-notes" className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              Примечания / Еда / Активность
             </label>
             <textarea
+              id="entry-notes"
               rows={2}
-              placeholder="Что съели, самочувствие, физическая нагрузка..."
+              placeholder="Что съели, физическая активность, самочувствие..."
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs sm:text-sm focus:ring-2 focus:ring-teal-500/40 outline-none transition placeholder:text-slate-400"
+              className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
             />
-            {/* Быстрые теги заметок */}
-            <div className="flex flex-wrap gap-1.5 mt-2">
-              {[
-                'Овсянка с ягодами',
-                'Гречка с мясом',
-                'Овощной салат',
-                'Быстрые углеводы (сок 200мл)',
-                'Прогулка 40 мин',
-                'Тренировка',
-                'Стресс / работа',
-                'Перед сном',
-              ].map((txt) => (
-                <button
-                  key={txt}
-                  type="button"
-                  onClick={() => setNotes((prev) => (prev ? `${prev}, ${txt}` : txt))}
-                  className="px-2.5 py-1 text-[11px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer"
-                >
-                  +{txt}
-                </button>
-              ))}
-            </div>
           </div>
 
           {/* Footer Action Buttons */}
-          <div className="pt-4 border-t border-slate-200/80 dark:border-slate-800/80 flex items-center justify-end gap-3">
+          <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2.5">
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs sm:text-sm font-semibold hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+              className="h-11 px-4 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs sm:text-sm font-semibold hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer min-h-[44px]"
             >
               Отмена
             </button>
             <button
               type="submit"
-              className="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 active:scale-97 text-white text-xs sm:text-sm font-bold shadow-md shadow-teal-500/25 flex items-center gap-2 transition cursor-pointer"
+              className="h-11 px-5 rounded-lg bg-teal-600 hover:bg-teal-700 active:bg-teal-800 text-white text-xs sm:text-sm font-semibold shadow-xs flex items-center gap-2 transition cursor-pointer min-h-[44px]"
             >
               <Check className="w-4 h-4" />
-              {initialEntry ? 'Сохранить изменения' : 'Добавить замер'}
+              <span>{initialEntry ? 'Сохранить изменения' : 'Добавить запись'}</span>
             </button>
           </div>
 

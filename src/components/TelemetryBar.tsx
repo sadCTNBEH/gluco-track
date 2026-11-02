@@ -1,17 +1,7 @@
 import React from 'react';
 import { DiaryEntry, UserSettings } from '../types/diabetes';
 import { calculateMonthlyStats, evaluateGlucose } from '../utils/diabetes';
-import {
-  Activity,
-  Award,
-  Syringe,
-  Utensils,
-  TrendingDown,
-  TrendingUp,
-  Target,
-  Sparkles,
-  ShieldCheck,
-} from 'lucide-react';
+import { Target } from 'lucide-react';
 
 interface TelemetryBarProps {
   entries: DiaryEntry[];
@@ -27,136 +17,141 @@ export const TelemetryBar: React.FC<TelemetryBarProps> = ({
   const stats = calculateMonthlyStats(entries);
   const glucoseEval = stats.avgGlucose !== null ? evaluateGlucose(stats.avgGlucose) : null;
 
-  // Расчет предполагаемого гликированного гемоглобина (eHbA1c ~ (Ср.сахар + 2.59) / 1.59 по формуле NGSP/DCCT)
+  // Оценочный расчет eHbA1c по стандартной формуле DCCT/NGSP
   const estimatedHbA1c =
     stats.avgGlucose !== null
       ? Number(((stats.avgGlucose + 2.59) / 1.59).toFixed(1))
       : null;
 
-  // TIR доли
-  const tirNormal = stats.tir.normalPercent;
-  const tirLow = stats.tir.lowPercent;
-  const tirHigh = stats.tir.highPercent + stats.tir.veryHighPercent;
+  // Доли измерений
+  const percentNormal = stats.tir.normalPercent;
+  const percentLow = stats.tir.lowPercent;
+  const percentHigh = stats.tir.highPercent + stats.tir.veryHighPercent;
 
   return (
-    <div className="print:hidden border-b border-slate-200/80 dark:border-slate-800/80 bg-white/70 dark:bg-slate-900/60 backdrop-blur-md py-3 px-4 sm:px-6">
+    <div className="print:hidden border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 py-3 px-4 sm:px-6">
       <div className="max-w-7xl mx-auto space-y-3">
-        {/* Верхняя строка: Пациент, Цели и Ключевые метрики */}
-        <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+        {/* Верхняя строка: Сводка ключевых показателей */}
+        <div className="flex flex-wrap items-center justify-between gap-3 text-xs sm:text-sm">
           
-          {/* Левый блок: инфо о пациенте и целевом коридоре */}
-          <div className="flex flex-wrap items-center gap-2.5 sm:gap-4">
-            <div className="flex items-center gap-2 px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200/70 dark:border-slate-700/60 font-semibold text-slate-800 dark:text-slate-200 shadow-xs">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Пациент: <strong className="text-teal-700 dark:text-teal-300">{patientName}</strong></span>
+          {/* Левый блок: Пациент и цели */}
+          <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-slate-600 dark:text-slate-400">
+            <div className="font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-teal-600 shrink-0" />
+              <span>Пациент: <strong>{patientName}</strong></span>
             </div>
 
-            <div className="hidden sm:flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
-              <Target className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-              <span>Целевой коридор:</span>
-              <strong className="font-mono text-slate-700 dark:text-slate-300">
+            <span className="hidden sm:inline text-slate-300 dark:text-slate-700">|</span>
+
+            <div className="hidden sm:flex items-center gap-1.5">
+              <Target className="w-3.5 h-3.5 text-slate-400" />
+              <span>Целевой диапазон:</span>
+              <strong className="font-mono text-slate-800 dark:text-slate-200">
                 {settings.targetLow} – {settings.targetHigh} ммоль/л
               </strong>
             </div>
 
-            <div className="hidden lg:flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
-              <Utensils className="w-3.5 h-3.5 text-slate-400" />
-              <span>ХЕ:</span>
-              <strong className="text-slate-700 dark:text-slate-300">1 ХЕ = {settings.xeRatio} г</strong>
+            <span className="hidden lg:inline text-slate-300 dark:text-slate-700">|</span>
+
+            <div className="hidden lg:flex items-center gap-1.5">
+              <span>1 ХЕ = <strong className="font-mono text-slate-800 dark:text-slate-200">{settings.xeRatio} г</strong></span>
             </div>
           </div>
 
-          {/* Правый блок: Экспресс-виджеты TIR и Средней гликемии */}
-          <div className="flex flex-wrap items-center gap-2">
-            {stats.avgGlucose !== null && (
-              <div className="flex items-center gap-2 px-3 py-1 rounded-xl bg-slate-100/90 dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/60 shadow-xs">
-                <span className="text-slate-500 dark:text-slate-400">Ср. гликемия:</span>
-                <span className={`font-mono font-bold ${glucoseEval?.textClass}`}>
+          {/* Правый блок: Средняя глюкоза и Доля в целевом диапазоне */}
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            {stats.avgGlucose !== null ? (
+              <div className="flex items-center gap-2 px-3 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs">
+                <span className="text-slate-500 dark:text-slate-400">Ср. глюкоза:</span>
+                <span className={`font-mono font-bold text-sm ${glucoseEval?.textClass}`}>
                   {stats.avgGlucose} ммоль/л
                 </span>
-                {estimatedHbA1c !== null && (
-                  <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border border-teal-500/20 font-mono" title="Оценочный гликированный гемоглобин (eHbA1c)">
-                    eHbA1c ~{estimatedHbA1c}%
+                {glucoseEval && (
+                  <span className={`text-xs px-1.5 py-0.2 rounded border font-medium ${glucoseEval.badgeClass}`}>
+                    {glucoseEval.shortLabel}
                   </span>
                 )}
               </div>
+            ) : null}
+
+            {stats.totalEntries > 0 && (
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs font-semibold">
+                <span>В целевом диапазоне:</span>
+                <strong className="font-mono text-sm">{percentNormal}%</strong>
+              </div>
             )}
 
-            {/* TIR виджет */}
-            <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-500/10 dark:bg-emerald-950/30 border border-emerald-500/25 text-emerald-800 dark:text-emerald-300 font-medium shadow-xs">
-              <Award className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-              <span>TIR: <strong className="font-mono">{tirNormal}%</strong> в норме</span>
-            </div>
+            {estimatedHbA1c !== null && (
+              <div className="hidden md:flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-400" title="Ориентировочный расчет (не заменяет лабораторный анализ HbA1c)">
+                <span>eHbA1c:</span>
+                <strong className="font-mono text-slate-900 dark:text-slate-100">~{estimatedHbA1c}%</strong>
+              </div>
+            )}
           </div>
 
         </div>
 
-        {/* Нижняя полоса: Сегментированный Time In Range прогресс-бар и распределение доз */}
+        {/* Нижняя строка: Распределение измерений + суточный инсулин */}
         {entries.length > 0 && stats.totalEntries > 0 && (
-          <div className="pt-2 border-t border-slate-200/50 dark:border-slate-800/50 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 text-xs">
+          <div className="pt-2 border-t border-slate-200/60 dark:border-slate-800 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 text-xs">
             
-            {/* Клинический TIR сегментированный индикатор */}
+            {/* Доля измерений в диапазоне */}
             <div className="flex-1 min-w-[240px] flex items-center gap-3">
-              <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 shrink-0">
-                Время в целевом диапазоне (TIR):
+              <span className="text-xs text-slate-500 dark:text-slate-400 font-medium shrink-0">
+                Доля измерений в целевом диапазоне:
               </span>
               
-              <div className="flex-1 h-3 rounded-full overflow-hidden bg-slate-200 dark:bg-slate-800 flex shadow-inner">
-                {/* Низкий (<3.9) */}
-                {tirLow > 0 && (
+              <div className="flex-1 h-2.5 rounded-full overflow-hidden bg-slate-200 dark:bg-slate-800 flex">
+                {percentLow > 0 && (
                   <div
-                    style={{ width: `${tirLow}%` }}
-                    className="bg-amber-500 h-full transition-all duration-500 relative group"
-                    title={`Ниже цели (<3.9): ${tirLow}%`}
+                    style={{ width: `${percentLow}%` }}
+                    className="bg-amber-500 h-full"
+                    title={`Ниже цели (<3.9): ${percentLow}%`}
                   />
                 )}
-                {/* Норма (4.0-9.9) */}
-                {tirNormal > 0 && (
+                {percentNormal > 0 && (
                   <div
-                    style={{ width: `${tirNormal}%` }}
-                    className="bg-emerald-500 h-full transition-all duration-500 relative group"
-                    title={`В норме (4.0-9.9): ${tirNormal}%`}
+                    style={{ width: `${percentNormal}%` }}
+                    className="bg-emerald-600 h-full"
+                    title={`В норме (4.0–9.9): ${percentNormal}%`}
                   />
                 )}
-                {/* Выше цели (>=10.0) */}
-                {tirHigh > 0 && (
+                {percentHigh > 0 && (
                   <div
-                    style={{ width: `${tirHigh}%` }}
-                    className="bg-rose-500 h-full transition-all duration-500 relative group"
-                    title={`Выше цели (>=10.0): ${tirHigh}%`}
+                    style={{ width: `${percentHigh}%` }}
+                    className="bg-rose-600 h-full"
+                    title={`Выше цели (>=10.0): ${percentHigh}%`}
                   />
                 )}
               </div>
 
-              {/* Легенда процентов */}
-              <div className="flex items-center gap-2 font-mono text-[11px] shrink-0">
-                <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-0.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                  {tirNormal}%
+              {/* Легенда */}
+              <div className="flex items-center gap-2.5 font-mono text-xs shrink-0">
+                <span className="text-emerald-700 dark:text-emerald-400 font-bold flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-emerald-600" />
+                  {percentNormal}%
                 </span>
-                <span className="text-amber-500 font-bold flex items-center gap-0.5">
+                <span className="text-amber-700 dark:text-amber-400 font-medium flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-amber-500" />
-                  {tirLow}%
+                  {percentLow}%
                 </span>
-                <span className="text-rose-500 font-bold flex items-center gap-0.5">
-                  <span className="w-2 h-2 rounded-full bg-rose-500" />
-                  {tirHigh}%
+                <span className="text-rose-700 dark:text-rose-400 font-medium flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-rose-600" />
+                  {percentHigh}%
                 </span>
               </div>
             </div>
 
-            {/* Суточные инсулины и углеводы */}
-            <div className="flex items-center gap-3 text-slate-500 dark:text-slate-400 text-[11px] shrink-0 font-medium">
+            {/* Суточные дозы инсулинов */}
+            <div className="flex items-center gap-3 text-slate-500 dark:text-slate-400 text-xs shrink-0">
               {stats.avgDailyRinFast > 0 && (
-                <span className="flex items-center gap-1 text-blue-600 dark:text-blue-400">
-                  <Syringe className="w-3 h-3" />
-                  РинФаст ср.: <strong className="font-mono">{stats.avgDailyRinFast} ед/сут</strong>
+                <span>
+                  РинФаст (болюс): <strong className="font-mono text-slate-800 dark:text-slate-200">{stats.avgDailyRinFast} ед/сут</strong>
                 </span>
               )}
               {stats.avgDailyTresiba > 0 && (
-                <span className="flex items-center gap-1 text-purple-600 dark:text-purple-400">
-                  <Syringe className="w-3 h-3" />
-                  Тресиба ср.: <strong className="font-mono">{stats.avgDailyTresiba} ед/сут</strong>
+                <span>
+                  Тресиба (базал): <strong className="font-mono text-slate-800 dark:text-slate-200">{stats.avgDailyTresiba} ед/сут</strong>
                 </span>
               )}
             </div>

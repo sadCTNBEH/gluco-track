@@ -14,7 +14,7 @@ import {
   PieChart,
   BarChart3,
   Award,
-  Sparkles,
+  Moon,
 } from 'lucide-react';
 
 interface MonthlyChartsProps {
@@ -22,7 +22,7 @@ interface MonthlyChartsProps {
 }
 
 export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({ entries }) => {
-  // Получаем список доступных месяцев из записей
+  // Список доступных месяцев
   const availableMonths = useMemo(() => {
     const monthsSet = new Set<string>();
     const nowMonth = new Date().toISOString().slice(0, 7);
@@ -51,7 +51,7 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({ entries }) => {
     return calculateMonthlyStats(entries, selectedMonth);
   }, [entries, selectedMonth]);
 
-  // Записи за выбранный месяц
+  // Записи за выбранный месяц с замерами сахара
   const monthEntries = useMemo(() => {
     return entries
       .filter((e) => e.date.startsWith(selectedMonth) && e.glucose !== null && e.glucose > 0)
@@ -61,10 +61,10 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({ entries }) => {
   // Распределение по времени суток (Утро, День, Вечер, Ночь)
   const timeOfDayStats = useMemo(() => {
     const buckets: { label: string; period: string; sum: number; count: number }[] = [
-      { label: 'Утро', period: '06:00 - 12:00', sum: 0, count: 0 },
-      { label: 'День', period: '12:00 - 18:00', sum: 0, count: 0 },
-      { label: 'Вечер', period: '18:00 - 23:00', sum: 0, count: 0 },
-      { label: 'Ночь', period: '23:00 - 06:00', sum: 0, count: 0 },
+      { label: 'Утро', period: '06:00 – 12:00', sum: 0, count: 0 },
+      { label: 'День', period: '12:00 – 18:00', sum: 0, count: 0 },
+      { label: 'Вечер', period: '18:00 – 23:00', sum: 0, count: 0 },
+      { label: 'Ночь', period: '23:00 – 06:00', sum: 0, count: 0 },
     ];
 
     for (const e of monthEntries) {
@@ -153,27 +153,25 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({ entries }) => {
   return (
     <div className="space-y-6">
       {/* Селектор месяца и заголовок */}
-      <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-md p-5 sm:p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
+      <div className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="p-2 rounded-2xl bg-teal-500/10 text-teal-600 dark:text-teal-400 border border-teal-500/20">
-              <TrendingUp className="w-5 h-5" />
-            </span>
-            <h2 className="text-lg sm:text-xl font-black tracking-tight text-slate-900 dark:text-white capitalize">
+            <TrendingUp className="w-5 h-5 text-teal-600 dark:text-teal-400" />
+            <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 capitalize">
               Аналитика: {formatMonthYearRussian(selectedMonth)}
             </h2>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Клинический гликемический профиль, время в диапазоне (TIR) и соотношение доз
+            Статистика измерений гликемии и дозировок инсулина за выбранный календарный месяц
           </p>
         </div>
 
         {/* Переключатель месяца */}
-        <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl border border-slate-200/60 dark:border-slate-700/60">
+        <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg border border-slate-200 dark:border-slate-700">
           <button
             onClick={handlePrevMonth}
             disabled={availableMonths.indexOf(selectedMonth) >= availableMonths.length - 1}
-            className="p-1.5 rounded-xl hover:bg-white dark:hover:bg-slate-700 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer text-slate-600 dark:text-slate-300"
+            className="p-1.5 rounded hover:bg-white dark:hover:bg-slate-700 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center text-slate-700 dark:text-slate-300"
             title="Предыдущий месяц"
             aria-label="Предыдущий месяц"
           >
@@ -182,10 +180,10 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({ entries }) => {
           <select
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(e.target.value)}
-            className="px-3 py-1.5 rounded-xl font-bold text-xs bg-transparent text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
+            className="px-2.5 py-1 rounded font-semibold text-xs bg-transparent text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer h-9"
           >
             {availableMonths.map((m) => (
-              <option key={m} value={m} className="dark:bg-slate-900 text-slate-900 dark:text-white">
+              <option key={m} value={m} className="dark:bg-slate-900 text-slate-900 dark:text-slate-100">
                 {formatMonthYearRussian(m)}
               </option>
             ))}
@@ -193,7 +191,7 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({ entries }) => {
           <button
             onClick={handleNextMonth}
             disabled={availableMonths.indexOf(selectedMonth) <= 0}
-            className="p-1.5 rounded-xl hover:bg-white dark:hover:bg-slate-700 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer text-slate-600 dark:text-slate-300"
+            className="p-1.5 rounded hover:bg-white dark:hover:bg-slate-700 disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center text-slate-700 dark:text-slate-300"
             title="Следующий месяц"
             aria-label="Следующий месяц"
           >
@@ -202,107 +200,107 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({ entries }) => {
         </div>
       </div>
 
-      {/* Клинические ключевые метрики месяца */}
+      {/* Метрики месяца */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
-        {/* Средний сахар */}
-        <div className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-4 sm:p-5 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-xs space-y-1">
+        {/* Средняя глюкоза */}
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-1">
           <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-            <span className="font-semibold">Средняя гликемия</span>
-            <Activity className="w-4 h-4 text-teal-500" />
+            <span className="font-semibold">Средняя глюкоза</span>
+            <Activity className="w-4 h-4 text-slate-400" />
           </div>
-          <div className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white font-mono">
+          <div className="text-2xl font-bold text-slate-900 dark:text-slate-100 font-mono">
             {stats.avgGlucose !== null ? stats.avgGlucose : '—'}{' '}
             <span className="text-xs font-normal text-slate-400 font-sans">ммоль/л</span>
           </div>
-          <div className="text-[11px] text-slate-400 font-mono">
+          <div className="text-xs text-slate-400 font-mono">
             {stats.totalEntries} замеров • {stats.activeDaysCount} дн.
           </div>
         </div>
 
-        {/* TIR */}
-        <div className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-4 sm:p-5 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-xs space-y-1">
+        {/* Доля в целевом диапазоне */}
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-1">
           <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-            <span className="font-semibold">Целевой TIR (4.0-9.9)</span>
-            <Award className="w-4 h-4 text-emerald-500" />
+            <span className="font-semibold">В норме (4.0–9.9)</span>
+            <Award className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
           </div>
-          <div className="text-2xl sm:text-3xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
+          <div className="text-2xl font-bold text-emerald-700 dark:text-emerald-400 font-mono">
             {stats.tir.normalPercent}%
           </div>
-          <div className="text-[11px] text-slate-400">
-            Клиническая цель: &gt; 70%
+          <div className="text-xs text-slate-400">
+            Доля измерений в целевом диапазоне
           </div>
         </div>
 
-        {/* Оценочный HbA1c */}
-        <div className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-4 sm:p-5 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-xs space-y-1">
+        {/* Оценочный eHbA1c */}
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-1">
           <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-            <span className="font-semibold">Расчетный HbA1c</span>
-            <PieChart className="w-4 h-4 text-blue-500" />
+            <span className="font-semibold">Расчетный eHbA1c</span>
+            <PieChart className="w-4 h-4 text-slate-400" />
           </div>
-          <div className="text-2xl sm:text-3xl font-black text-blue-600 dark:text-blue-400 font-mono">
-            {stats.estimatedHbA1c !== null ? `${stats.estimatedHbA1c}%` : '—'}
+          <div className="text-2xl font-bold text-slate-900 dark:text-slate-100 font-mono">
+            {stats.estimatedHbA1c !== null ? `~${stats.estimatedHbA1c}%` : '—'}
           </div>
-          <div className="text-[11px] text-slate-400">
-            Оценка по формуле DCCT
+          <div className="text-xs text-slate-400">
+            Ориентировочно (не заменяет лабораторию)
           </div>
         </div>
 
-        {/* Инсулины / день */}
-        <div className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-4 sm:p-5 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-xs space-y-1">
+        {/* Суточный инсулин */}
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-1">
           <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-            <span className="font-semibold">Ср. инсулин / сут</span>
-            <Syringe className="w-4 h-4 text-purple-500" />
+            <span className="font-semibold">Инсулин в среднем</span>
+            <Syringe className="w-4 h-4 text-slate-400" />
           </div>
-          <div className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white font-mono">
-            <span className="text-blue-600 dark:text-blue-400">{stats.avgDailyRinFast}</span> +{' '}
-            <span className="text-purple-600 dark:text-purple-400">{stats.avgDailyTresiba}</span>{' '}
-            <span className="text-xs font-normal text-slate-400 font-sans">ед</span>
+          <div className="text-xl font-bold text-slate-900 dark:text-slate-100 font-mono">
+            <span className="text-blue-700 dark:text-blue-400">{stats.avgDailyRinFast}</span> +{' '}
+            <span className="text-purple-700 dark:text-purple-400">{stats.avgDailyTresiba}</span>{' '}
+            <span className="text-xs font-normal text-slate-400 font-sans">ед/сут</span>
           </div>
-          <div className="text-[11px] text-slate-400">
+          <div className="text-xs text-slate-400">
             РинФаст (болюс) + Тресиба (базал)
           </div>
         </div>
       </div>
 
-      {/* 1. График Динамики Глюкозы с Целевым Зеленым Коридором */}
-      <div className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-5 sm:p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-xs space-y-4">
+      {/* 1. График динамики глюкозы */}
+      <div className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
-            <h3 className="font-black text-base text-slate-900 dark:text-white flex items-center gap-2">
+            <h3 className="font-bold text-base text-slate-900 dark:text-slate-100 flex items-center gap-2">
               <Activity className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-              График динамики гликемии за месяц
+              Динамика измерений глюкозы
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Зеленая область — целевой диапазон 4.0 – 9.9 ммоль/л. Нажмите на точку для подробностей.
+              Зеленая зона — целевой коридор (4.0 – 9.9 ммоль/л). Нажмите на точку для просмотра данных.
             </p>
           </div>
 
           {/* Легенда */}
           <div className="flex flex-wrap items-center gap-3 text-xs font-medium">
-            <span className="flex items-center gap-1.5 text-amber-500">
+            <span className="flex items-center gap-1 text-amber-700 dark:text-amber-400">
               <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
               <span>&lt; 3.9 Низкий</span>
             </span>
-            <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+            <span className="flex items-center gap-1 text-emerald-700 dark:text-emerald-400">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-600" />
               <span>4.0 – 9.9 Норма</span>
             </span>
-            <span className="flex items-center gap-1.5 text-orange-500">
+            <span className="flex items-center gap-1 text-orange-700 dark:text-orange-400">
               <span className="w-2.5 h-2.5 rounded-full bg-orange-500" />
               <span>10.0 – 13.9 Высокий</span>
             </span>
-            <span className="flex items-center gap-1.5 text-rose-500">
+            <span className="flex items-center gap-1 text-rose-700 dark:text-rose-400">
               <span className="w-2.5 h-2.5 rounded-full bg-rose-600" />
               <span>&gt; 13.9 Критический</span>
             </span>
           </div>
         </div>
 
-        {/* SVG График */}
+        {/* SVG Полотно графика */}
         <div className="relative overflow-x-auto">
           {monthEntries.length === 0 ? (
             <div className="h-64 flex items-center justify-center text-xs text-slate-400">
-              В выбранном месяце нет замеров сахара
+              В выбранном месяце нет измерений сахара
             </div>
           ) : (
             <div className="min-w-[700px]">
@@ -326,7 +324,7 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({ entries }) => {
                         x={padding.left - 8}
                         y={y + 4}
                         textAnchor="end"
-                        className="text-[10px] fill-slate-400 font-mono"
+                        className="text-xs fill-slate-400 font-mono"
                       >
                         {level === 3.9 ? '3.9' : level}
                       </text>
@@ -334,15 +332,14 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({ entries }) => {
                   );
                 })}
 
-                {/* Целевой Зеленый Коридор (Норма: 4.0 - 9.9) */}
+                {/* Целевой коридор (4.0 - 9.9) */}
                 <rect
                   x={padding.left}
                   y={yHighTarget}
                   width={innerWidth}
                   height={Math.abs(yLowTarget - yHighTarget)}
                   fill="#10b981"
-                  fillOpacity="0.09"
-                  rx="4"
+                  fillOpacity="0.08"
                 />
 
                 {/* Линия нормы 4.0 */}
@@ -352,8 +349,8 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({ entries }) => {
                   x2={chartWidth - padding.right}
                   y2={yLowTarget}
                   stroke="#10b981"
-                  strokeWidth="1.5"
-                  strokeOpacity="0.4"
+                  strokeWidth="1"
+                  strokeOpacity="0.6"
                 />
 
                 {/* Линия нормы 9.9 */}
@@ -363,11 +360,11 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({ entries }) => {
                   x2={chartWidth - padding.right}
                   y2={yHighTarget}
                   stroke="#10b981"
-                  strokeWidth="1.5"
-                  strokeOpacity="0.4"
+                  strokeWidth="1"
+                  strokeOpacity="0.6"
                 />
 
-                {/* Подписи дней по X */}
+                {/* Подписи дней по оси X */}
                 {[1, 5, 10, 15, 20, 25, 30].map((d) => {
                   const fraction = (d - 1) / daysInMonth;
                   const x = padding.left + fraction * innerWidth;
@@ -386,7 +383,7 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({ entries }) => {
                         x={x}
                         y={chartHeight - padding.bottom + 16}
                         textAnchor="middle"
-                        className="text-[10px] fill-slate-400 font-mono"
+                        className="text-xs fill-slate-400 font-mono"
                       >
                         {d}
                       </text>
@@ -405,13 +402,13 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({ entries }) => {
                     .join(' ')}
                   fill="none"
                   stroke="#0d9488"
-                  strokeWidth="2.5"
+                  strokeWidth="2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  opacity="0.75"
+                  opacity="0.8"
                 />
 
-                {/* Точки замеров */}
+                {/* Точки замеров с поддержкой клавиатуры */}
                 {monthEntries.map((e) => {
                   const x = getX(e.date, e.time);
                   const y = getY(e.glucose || 5.5);
@@ -419,11 +416,11 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({ entries }) => {
 
                   const fillColor =
                     ev?.status === 'low'
-                      ? '#f59e0b'
+                      ? '#d97706'
                       : ev?.status === 'normal'
-                      ? '#10b981'
+                      ? '#059669'
                       : ev?.status === 'high'
-                      ? '#f97316'
+                      ? '#ea580c'
                       : '#e11d48';
 
                   const isHovered = hoveredPoint?.entry.id === e.id;
@@ -431,19 +428,28 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({ entries }) => {
                   return (
                     <g
                       key={e.id}
-                      className="cursor-pointer"
+                      className="cursor-pointer focus:outline-none"
+                      tabIndex={0}
+                      role="button"
+                      aria-label={`${e.date} ${e.time}: глюкоза ${e.glucose} ммоль/л, статус ${ev?.shortLabel}`}
                       onMouseEnter={() => setHoveredPoint({ x, y, entry: e })}
                       onMouseLeave={() => setHoveredPoint(null)}
                       onClick={() => setHoveredPoint({ x, y, entry: e })}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          setHoveredPoint({ x, y, entry: e });
+                        }
+                      }}
                     >
                       <circle
                         cx={x}
                         cy={y}
-                        r={isHovered ? 8 : 4.5}
+                        r={isHovered ? 7 : 4}
                         fill={fillColor}
                         stroke="#ffffff"
-                        strokeWidth={isHovered ? 2.5 : 1.5}
-                        className="transition-all duration-150"
+                        strokeWidth={isHovered ? 2 : 1}
+                        className="transition-all duration-100"
                       />
                     </g>
                   );
@@ -453,33 +459,33 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({ entries }) => {
               {/* Тултип */}
               {hoveredPoint && (
                 <div
-                  className="absolute z-20 pointer-events-none p-3.5 rounded-2xl bg-slate-900/95 text-white text-xs shadow-2xl backdrop-blur-xl border border-slate-700/80 space-y-1.5"
+                  className="absolute z-20 pointer-events-none p-3 rounded-lg bg-slate-900 text-white text-xs shadow-lg border border-slate-700 space-y-1 max-w-[240px]"
                   style={{
-                    left: `${Math.min(chartWidth - 190, Math.max(20, hoveredPoint.x - 75))}px`,
+                    left: `${Math.min(chartWidth - 210, Math.max(20, hoveredPoint.x - 80))}px`,
                     top: `${Math.max(10, hoveredPoint.y - 120)}px`,
                   }}
                 >
-                  <div className="font-mono font-bold flex items-center justify-between gap-3 text-teal-300">
+                  <div className="font-mono font-bold flex items-center justify-between gap-3 text-slate-300">
                     <span>{hoveredPoint.entry.date}</span>
                     <span>{hoveredPoint.entry.time}</span>
                   </div>
-                  <div className="text-base font-black flex items-center gap-1.5 font-mono">
+                  <div className="text-sm font-bold flex items-center gap-1.5 font-mono text-white">
                     <span>{hoveredPoint.entry.glucose} ммоль/л</span>
-                    <span className="text-[10px] font-sans font-semibold px-2 py-0.2 rounded-full bg-white/20">
+                    <span className="text-xs font-sans font-medium px-1.5 py-0.2 rounded bg-slate-800 border border-slate-700">
                       {evaluateGlucose(hoveredPoint.entry.glucose)?.shortLabel}
                     </span>
                   </div>
                   {hoveredPoint.entry.rinFast && (
-                    <div className="text-blue-300 font-mono">💉 РинФаст: {hoveredPoint.entry.rinFast} ед</div>
+                    <div className="text-blue-300 font-mono">РинФаст: {hoveredPoint.entry.rinFast} ед</div>
                   )}
                   {hoveredPoint.entry.tresiba && (
-                    <div className="text-purple-300 font-mono">🌙 Тресиба: {hoveredPoint.entry.tresiba} ед</div>
+                    <div className="text-purple-300 font-mono">Тресиба: {hoveredPoint.entry.tresiba} ед</div>
                   )}
                   {hoveredPoint.entry.xe && (
-                    <div className="text-amber-300 font-mono">🍽️ ХЕ: {hoveredPoint.entry.xe} ({hoveredPoint.entry.carbs} г)</div>
+                    <div className="text-teal-300 font-mono">ХЕ: {hoveredPoint.entry.xe} ({hoveredPoint.entry.carbs} г)</div>
                   )}
                   {hoveredPoint.entry.notes && (
-                    <div className="text-slate-300 italic max-w-[200px] truncate text-[11px]">
+                    <div className="text-slate-400 italic truncate text-xs pt-0.5 border-t border-slate-800">
                       {hoveredPoint.entry.notes}
                     </div>
                   )}
@@ -490,97 +496,97 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({ entries }) => {
         </div>
       </div>
 
-      {/* 2. Распределение TIR и Профиль по времени суток */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* 2. Доли в целевом диапазоне и профиль по времени суток */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         
-        {/* Детализация TIR */}
-        <div className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-5 sm:p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-xs space-y-4">
+        {/* Доли диапазонов */}
+        <div className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-3.5">
           <div className="flex items-center justify-between">
-            <h3 className="font-extrabold text-sm text-slate-900 dark:text-white flex items-center gap-2">
-              <PieChart className="w-4 h-4 text-emerald-500" />
-              Целевой диапазон (TIR)
+            <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <PieChart className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              Доля измерений в диапазонах
             </h3>
-            <span className="text-xs text-slate-400 font-mono">Всего: {stats.totalEntries}</span>
+            <span className="text-xs text-slate-400 font-mono">Всего замеров: {stats.totalEntries}</span>
           </div>
 
-          {/* Полоса прогресса TIR */}
-          <div className="h-5 w-full rounded-full overflow-hidden flex shadow-inner bg-slate-100 dark:bg-slate-800">
+          {/* Сегментированная полоса */}
+          <div className="h-4 w-full rounded-md overflow-hidden flex bg-slate-100 dark:bg-slate-800">
             {stats.tir.lowPercent > 0 && (
               <div
                 style={{ width: `${stats.tir.lowPercent}%` }}
-                className="bg-amber-500 h-full flex items-center justify-center text-[10px] font-bold text-white transition-all"
+                className="bg-amber-500 h-full flex items-center justify-center text-xs font-bold text-white"
                 title={`Низкий: ${stats.tir.lowPercent}%`}
               >
-                {stats.tir.lowPercent >= 6 ? `${stats.tir.lowPercent}%` : ''}
+                {stats.tir.lowPercent >= 8 ? `${stats.tir.lowPercent}%` : ''}
               </div>
             )}
             {stats.tir.normalPercent > 0 && (
               <div
                 style={{ width: `${stats.tir.normalPercent}%` }}
-                className="bg-emerald-500 h-full flex items-center justify-center text-[10px] font-bold text-white transition-all"
-                title={`Норма: ${stats.tir.normalPercent}%`}
+                className="bg-emerald-600 h-full flex items-center justify-center text-xs font-bold text-white"
+                title={`В норме: ${stats.tir.normalPercent}%`}
               >
-                {stats.tir.normalPercent >= 6 ? `${stats.tir.normalPercent}%` : ''}
+                {stats.tir.normalPercent >= 8 ? `${stats.tir.normalPercent}%` : ''}
               </div>
             )}
             {stats.tir.highPercent > 0 && (
               <div
                 style={{ width: `${stats.tir.highPercent}%` }}
-                className="bg-orange-500 h-full flex items-center justify-center text-[10px] font-bold text-white transition-all"
+                className="bg-orange-500 h-full flex items-center justify-center text-xs font-bold text-white"
                 title={`Высокий: ${stats.tir.highPercent}%`}
               >
-                {stats.tir.highPercent >= 6 ? `${stats.tir.highPercent}%` : ''}
+                {stats.tir.highPercent >= 8 ? `${stats.tir.highPercent}%` : ''}
               </div>
             )}
             {stats.tir.veryHighPercent > 0 && (
               <div
                 style={{ width: `${stats.tir.veryHighPercent}%` }}
-                className="bg-rose-600 h-full flex items-center justify-center text-[10px] font-bold text-white transition-all"
+                className="bg-rose-600 h-full flex items-center justify-center text-xs font-bold text-white"
                 title={`Очень высокий: ${stats.tir.veryHighPercent}%`}
               >
-                {stats.tir.veryHighPercent >= 6 ? `${stats.tir.veryHighPercent}%` : ''}
+                {stats.tir.veryHighPercent >= 8 ? `${stats.tir.veryHighPercent}%` : ''}
               </div>
             )}
           </div>
 
-          {/* Детализация TIR категорий */}
+          {/* Детализация категорий */}
           <div className="space-y-2 text-xs">
-            <div className="flex items-center justify-between p-2.5 rounded-2xl bg-emerald-500/10 dark:bg-emerald-950/20 border border-emerald-500/20">
+            <div className="flex items-center justify-between p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800">
               <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                <span className="font-bold text-emerald-900 dark:text-emerald-300">Целевой диапазон (4.0 – 9.9)</span>
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 shrink-0" />
+                <span className="font-semibold text-emerald-900 dark:text-emerald-300">Целевой диапазон (4.0 – 9.9)</span>
               </div>
-              <div className="font-mono font-bold text-emerald-700 dark:text-emerald-400">
+              <div className="font-mono font-bold text-emerald-800 dark:text-emerald-300">
                 {stats.tir.normalCount} ({stats.tir.normalPercent}%)
               </div>
             </div>
 
-            <div className="flex items-center justify-between p-2.5 rounded-2xl bg-orange-500/10 dark:bg-orange-950/20 border border-orange-500/20">
+            <div className="flex items-center justify-between p-2 rounded-lg bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800">
               <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-orange-500" />
-                <span className="font-bold text-orange-900 dark:text-orange-300">Высокий (10.0 – 13.9)</span>
+                <span className="w-2.5 h-2.5 rounded-full bg-orange-500 shrink-0" />
+                <span className="font-semibold text-orange-900 dark:text-orange-300">Высокий (10.0 – 13.9)</span>
               </div>
-              <div className="font-mono font-bold text-orange-700 dark:text-orange-400">
+              <div className="font-mono font-bold text-orange-800 dark:text-orange-300">
                 {stats.tir.highCount} ({stats.tir.highPercent}%)
               </div>
             </div>
 
-            <div className="flex items-center justify-between p-2.5 rounded-2xl bg-rose-500/10 dark:bg-rose-950/20 border border-rose-500/20">
+            <div className="flex items-center justify-between p-2 rounded-lg bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800">
               <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-rose-600" />
-                <span className="font-bold text-rose-900 dark:text-rose-300">Очень высокий (&gt; 13.9)</span>
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-600 shrink-0" />
+                <span className="font-semibold text-rose-900 dark:text-rose-300">Очень высокий (&gt; 13.9)</span>
               </div>
-              <div className="font-mono font-bold text-rose-700 dark:text-rose-400">
+              <div className="font-mono font-bold text-rose-800 dark:text-rose-300">
                 {stats.tir.veryHighCount} ({stats.tir.veryHighPercent}%)
               </div>
             </div>
 
-            <div className="flex items-center justify-between p-2.5 rounded-2xl bg-amber-500/10 dark:bg-amber-950/20 border border-amber-500/20">
+            <div className="flex items-center justify-between p-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
               <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-                <span className="font-bold text-amber-900 dark:text-amber-300">Низкий (&lt; 3.9)</span>
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" />
+                <span className="font-semibold text-amber-900 dark:text-amber-300">Низкий (&lt; 3.9)</span>
               </div>
-              <div className="font-mono font-bold text-amber-700 dark:text-amber-400">
+              <div className="font-mono font-bold text-amber-800 dark:text-amber-300">
                 {stats.tir.lowCount} ({stats.tir.lowPercent}%)
               </div>
             </div>
@@ -588,32 +594,32 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({ entries }) => {
         </div>
 
         {/* Средний сахар по времени суток */}
-        <div className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-5 sm:p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-xs space-y-4">
+        <div className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-3.5">
           <div className="flex items-center justify-between">
-            <h3 className="font-extrabold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+            <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
               <BarChart3 className="w-4 h-4 text-teal-600 dark:text-teal-400" />
               Распределение по времени суток
             </h3>
             <span className="text-xs text-slate-400">Средние значения</span>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-2.5">
             {timeOfDayStats.map((item) => {
               const evalRes = item.avg ? evaluateGlucose(item.avg) : null;
 
               return (
                 <div
                   key={item.label}
-                  className="p-3.5 rounded-2xl border border-slate-200/70 dark:border-slate-800/80 bg-slate-50/70 dark:bg-slate-800/40 flex flex-col justify-between space-y-2"
+                  className="p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 flex flex-col justify-between space-y-1.5"
                 >
                   <div>
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-xs text-slate-800 dark:text-slate-200">
                         {item.label}
                       </span>
-                      <span className="text-[10px] text-slate-400 font-mono">{item.period}</span>
+                      <span className="text-xs text-slate-400 font-mono">{item.period}</span>
                     </div>
-                    <div className="text-xl font-black font-mono mt-1">
+                    <div className="text-lg font-bold font-mono mt-0.5">
                       {item.avg !== null ? (
                         <span className={evalRes?.textClass}>{item.avg} ммоль/л</span>
                       ) : (
@@ -621,10 +627,10 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({ entries }) => {
                       )}
                     </div>
                   </div>
-                  <div className="text-[10px] text-slate-400 flex items-center justify-between">
+                  <div className="text-xs text-slate-400 flex items-center justify-between">
                     <span>{item.count} замеров</span>
                     {evalRes && (
-                      <span className={`px-1.5 py-0.2 rounded-full border ${evalRes.badgeClass} font-semibold`}>
+                      <span className={`px-1.5 py-0.2 rounded border text-xs ${evalRes.badgeClass} font-medium`}>
                         {evalRes.shortLabel}
                       </span>
                     )}
@@ -634,20 +640,19 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({ entries }) => {
             })}
           </div>
 
-          {/* Аналитическая справка */}
-          <div className="p-3 rounded-2xl bg-teal-500/10 dark:bg-teal-950/20 border border-teal-500/20 text-xs text-teal-900 dark:text-teal-200 leading-relaxed">
-            💡 <strong>Клиническая подсказка:</strong> Сравните утренние замеры натощак с вечерними перед сном для индивидуальной коррекции базовой дозы <em>Тресиба</em>.
-          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-850 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 leading-relaxed">
+            Подсказка: Сравните замеры натощак и на ночь для оценки адекватности дозы базального инсулина Тресиба.
+          </p>
         </div>
 
       </div>
 
-      {/* 3. Суточные дозы инсулинов (РинФаст и Тресиба) */}
-      <div className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-5 sm:p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-xs space-y-4">
+      {/* 3. Суточные дозы инсулинов */}
+      <div className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
-            <h3 className="font-extrabold text-sm text-slate-900 dark:text-white flex items-center gap-2">
-              <Syringe className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+            <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <Syringe className="w-4 h-4 text-slate-400" />
               Суточные дозировки инсулинов (РинФаст vs Тресиба)
             </h3>
             <p className="text-xs text-slate-400">
@@ -655,12 +660,12 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({ entries }) => {
             </p>
           </div>
           <div className="flex items-center gap-3 text-xs font-semibold">
-            <span className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400">
-              <span className="w-3 h-3 rounded-md bg-blue-500" />
+            <span className="flex items-center gap-1.5 text-blue-700 dark:text-blue-400">
+              <span className="w-3 h-3 rounded bg-blue-600" />
               <span>РинФаст (болюс)</span>
             </span>
-            <span className="flex items-center gap-1.5 text-purple-600 dark:text-purple-400">
-              <span className="w-3 h-3 rounded-md bg-purple-500" />
+            <span className="flex items-center gap-1.5 text-purple-700 dark:text-purple-400">
+              <span className="w-3 h-3 rounded bg-purple-600" />
               <span>Тресиба (базал)</span>
             </span>
           </div>
@@ -672,7 +677,7 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({ entries }) => {
           </div>
         ) : (
           <div className="overflow-x-auto pb-2">
-            <div className="min-w-[650px] flex items-end gap-2 h-44 pt-6 px-2 border-b border-slate-200 dark:border-slate-800">
+            <div className="min-w-[650px] flex items-end gap-2 h-40 pt-4 px-2 border-b border-slate-200 dark:border-slate-800">
               {dailyInsulinData.map((d) => {
                 const maxVal = 45;
                 const rfHeight = Math.min(100, (d.rinFast / maxVal) * 100);
@@ -681,23 +686,24 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({ entries }) => {
                 return (
                   <div key={d.date} className="flex-1 flex flex-col items-center gap-1 group relative">
                     {/* Тултип */}
-                    <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-12 z-20 pointer-events-none bg-slate-900 text-white text-[10px] p-2 rounded-xl whitespace-nowrap shadow-lg border border-slate-700 font-mono">
+                    <div className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity absolute -top-12 z-20 pointer-events-none bg-slate-900 text-white text-xs p-2 rounded-lg whitespace-nowrap shadow-md border border-slate-700 font-mono">
                       <div className="font-bold">{d.date}</div>
-                      <div>РинФаст: {d.rinFast} ед</div>
-                      <div>Тресиба: {d.tresiba} ед</div>
+                      <div>РинФаст: {d.rinFast} ед • Тресиба: {d.tresiba} ед</div>
                     </div>
 
-                    <div className="w-full flex items-end justify-center gap-1 h-32">
+                    <div className="w-full flex items-end justify-center gap-0.5 h-28">
                       <div
                         style={{ height: `${rfHeight}%` }}
-                        className="w-1/2 bg-blue-500 rounded-t-sm hover:brightness-110 transition-all"
+                        className="w-1/2 bg-blue-600 rounded-t-sm"
+                        title={`${d.date} - РинФаст: ${d.rinFast} ед`}
                       />
                       <div
                         style={{ height: `${trHeight}%` }}
-                        className="w-1/2 bg-purple-500 rounded-t-sm hover:brightness-110 transition-all"
+                        className="w-1/2 bg-purple-600 rounded-t-sm"
+                        title={`${d.date} - Тресиба: ${d.tresiba} ед`}
                       />
                     </div>
-                    <span className="text-[9px] text-slate-400 font-mono">
+                    <span className="text-xs text-slate-400 font-mono">
                       {d.date.slice(8, 10)}
                     </span>
                   </div>
