@@ -2,19 +2,14 @@ import React, { useState, useMemo } from 'react';
 import { DiaryEntry, UserSettings } from '../types/diabetes';
 import {
   evaluateGlucose,
-  groupEntriesByDay,
-  calculateMonthlyStats,
+  calculateDayAggregates,
   formatDateRussian,
 } from '../utils/diabetes';
 import {
   Printer,
-  Calendar,
-  User,
-  Activity,
-  Syringe,
-  CheckCircle,
   FileText,
-  AlertTriangle,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 
 interface DoctorReportPdfProps {
@@ -29,7 +24,10 @@ export const DoctorReportPdf: React.FC<DoctorReportPdfProps> = ({
   onUpdateSettings,
 }) => {
   const [reportPeriod, setReportPeriod] = useState<'7d' | '14d' | '30d' | 'all'>('14d');
-  const [includeNotes, setIncludeNotes] = useState(true);
+  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
+
+  const bolusName = settings.bolusName || 'РинФаст';
+  const basalName = settings.basalName || 'Тресиба';
 
   // Фильтруем записи по выбранному периоду
   const filteredEntries = useMemo(() => {
@@ -43,9 +41,38 @@ export const DoctorReportPdf: React.FC<DoctorReportPdfProps> = ({
     return entries.filter((e) => e.date >= cutoffStr);
   }, [entries, reportPeriod]);
 
+  // Группировка по дням с двунаправленной сортировкой:
+  // Если sortOrder === 'newest' (дни от новых к старым):
+  //   Дни идут снизу вверх (старые внизу, новые вверху).
+  //   Время внутри дня тоже идет снизу вверх (утро внизу, ночь вверху => сверху вниз b.time.localeCompare(a.time)).
+  // Если sortOrder === 'oldest' (дни от старых к новым):
+  //   Дни идут сверху вниз (старые вверху, новые внизу).
+  //   Время внутри дня идет сверху вниз (утро вверху, ночь внизу => сверху вниз a.time.localeCompare(b.time)).
   const groupedDays = useMemo(() => {
-    return groupEntriesByDay(filteredEntries);
-  }, [filteredEntries]);
+    const groups: Record<string, DiaryEntry[]> = {};
+    for (const e of filteredEntries) {
+      if (!groups[e.date]) groups[e.date] = [];
+      groups[e.date].push(e);
+    }
+
+    const sortedDates = Object.keys(groups).sort((a, b) => {
+      return sortOrder === 'newest' ? b.localeCompare(a) : a.localeCompare(b);
+    });
+
+    return sortedDates.map((date) => {
+      const dayEntries = groups[date].sort((a, b) => {
+        return sortOrder === 'newest'
+          ? b.time.localeCompare(a.time)
+          : a.time.localeCompare(b.time);
+      });
+
+      return {
+        date,
+        entries: dayEntries,
+        summary: calculateDayAggregates(dayEntries),
+      };
+    });
+  }, [filteredEntries, sortOrder]);
 
   // Расчет суммарной статистики за период
   const stats = useMemo(() => {
@@ -114,7 +141,7 @@ export const DoctorReportPdf: React.FC<DoctorReportPdfProps> = ({
   return (
     <div className="space-y-6">
       {/* Панель управления отчетом (скрывается при печати) */}
-      <div className="print:hidden bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="print:hidden bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
         <div>
           <h2 className="text-base font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
             <FileText className="w-5 h-5 text-teal-600 dark:text-teal-400" />
@@ -126,6 +153,36 @@ export const DoctorReportPdf: React.FC<DoctorReportPdfProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
+          {/* Сортировка отчета */}
+          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs border border-slate-200 dark:border-slate-700/60">
+            <button
+              type="button"
+              onClick={() => setSortOrder('newest')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer min-h-[34px] flex items-center gap-1.5 ${
+                sortOrder === 'newest'
+                  ? 'bg-white dark:bg-slate-900 text-teal-700 dark:text-teal-300 shadow-xs font-bold'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+              title="Сначала новые дни (время снизу вверх)"
+            >
+              <ArrowUp className="w-3.5 h-3.5" />
+              <span>Сначала новые</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setSortOrder('oldest')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer min-h-[34px] flex items-center gap-1.5 ${
+                sortOrder === 'oldest'
+                  ? 'bg-white dark:bg-slate-900 text-teal-700 dark:text-teal-300 shadow-xs font-bold'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+              title="Сначала старые дни (время сверху вниз)"
+            >
+              <ArrowDown className="w-3.5 h-3.5" />
+              <span>Сначала старые</span>
+            </button>
+          </div>
+
           {/* Период отчета */}
           <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs border border-slate-200 dark:border-slate-700/60">
             {[
@@ -175,12 +232,12 @@ export const DoctorReportPdf: React.FC<DoctorReportPdfProps> = ({
                 ДНЕВНИК САМОКОНТРОЛЯ САХАРНОГО ДИАБЕТА
               </h1>
               <p className="text-xs text-slate-600 mt-1">
-                Препараты инсулина: <strong>РинФаст</strong> (ультракороткий болюс) + <strong>Тресиба</strong> (базальный сверхдлительный)
+                Препараты инсулина: <strong>{bolusName}</strong> (болюс) + <strong>{basalName}</strong> (базал)
               </p>
             </div>
 
             {/* Карточка пациента */}
-            <div className="sm:text-right text-xs space-y-1 bg-slate-50 p-3 rounded-xl border border-slate-200 min-w-[200px]">
+            <div className="sm:text-right text-xs space-y-1 bg-slate-50 p-3 rounded-xl border border-slate-200 min-w-[220px]">
               <div>
                 Пациент:{' '}
                 <input
@@ -194,6 +251,7 @@ export const DoctorReportPdf: React.FC<DoctorReportPdfProps> = ({
               <div>Дата формирования: <strong>{new Date().toLocaleDateString('ru-RU')}</strong></div>
               <div>Период: <strong>{reportPeriod === '7d' ? '7 дней' : reportPeriod === '14d' ? '14 дней' : reportPeriod === '30d' ? '30 дней' : 'Весь период'}</strong></div>
               <div>Целевой сахар: <strong>{settings.targetLow} – {settings.targetHigh} ммоль/л</strong></div>
+              <div>Сортировка: <strong>{sortOrder === 'newest' ? 'Сначала новые (снизу вверх)' : 'Сначала старые (сверху вниз)'}</strong></div>
             </div>
           </div>
         </div>
@@ -202,15 +260,15 @@ export const DoctorReportPdf: React.FC<DoctorReportPdfProps> = ({
         <div className="mb-6 grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs">
           <div>
             <div className="text-slate-500 uppercase text-[10px] font-bold">Средняя гликемия</div>
-            <div className="text-xl font-black text-slate-900 mt-0.5">
+            <div className="text-xl font-black text-slate-900 mt-0.5 font-mono">
               {stats.avgGlucose !== null ? `${stats.avgGlucose} ммоль/л` : '—'}
             </div>
-            <div className="text-[10px] text-slate-500">Замеров: {stats.glucoseCount} ({stats.activeDays} дн.)</div>
+            <div className="text-[10px] text-slate-500 font-mono">Замеров: {stats.glucoseCount} ({stats.activeDays} дн.)</div>
           </div>
 
           <div>
             <div className="text-slate-500 uppercase text-[10px] font-bold">В норме (целевой диапазон)</div>
-            <div className="text-xl font-black text-emerald-700 mt-0.5">
+            <div className="text-xl font-black text-emerald-700 mt-0.5 font-mono">
               {stats.tir.normalPercent}%
             </div>
             <div className="text-[10px] text-slate-500">
@@ -220,7 +278,7 @@ export const DoctorReportPdf: React.FC<DoctorReportPdfProps> = ({
 
           <div>
             <div className="text-slate-500 uppercase text-[10px] font-bold">Расчетный eHbA1c</div>
-            <div className="text-xl font-black text-blue-800 mt-0.5">
+            <div className="text-xl font-black text-blue-800 mt-0.5 font-mono">
               {stats.estimatedHbA1c !== null ? `${stats.estimatedHbA1c}%` : '—'}
             </div>
             <div className="text-[10px] text-slate-500">Ориентировочно по замерам</div>
@@ -228,11 +286,11 @@ export const DoctorReportPdf: React.FC<DoctorReportPdfProps> = ({
 
           <div>
             <div className="text-slate-500 uppercase text-[10px] font-bold">Инсулин в среднем/день</div>
-            <div className="text-base font-black text-slate-900 mt-1">
-              РинФаст: {stats.avgRinFast} ед
+            <div className="text-base font-black text-slate-900 mt-1 font-mono">
+              {bolusName}: {stats.avgRinFast} ед
             </div>
-            <div className="text-[11px] font-bold text-purple-800">
-              Тресиба: {stats.avgTresiba} ед
+            <div className="text-[11px] font-bold text-purple-800 font-mono">
+              {basalName}: {stats.avgTresiba} ед
             </div>
           </div>
         </div>
@@ -245,8 +303,6 @@ export const DoctorReportPdf: React.FC<DoctorReportPdfProps> = ({
         ) : (
           <div className="space-y-6">
             {groupedDays.map(({ date, entries: dayEntries, summary }) => {
-              const dayGlucoseEval = summary.avgGlucose ? evaluateGlucose(summary.avgGlucose) : null;
-
               return (
                 <div
                   key={date}
@@ -258,12 +314,12 @@ export const DoctorReportPdf: React.FC<DoctorReportPdfProps> = ({
                       <span className="text-slate-900">{formatDateRussian(date)}</span>
                       <span className="text-slate-500 font-normal">({dayEntries.length} замера)</span>
                     </div>
-                    <div className="flex items-center gap-3 text-[11px]">
+                    <div className="flex items-center gap-3 text-[11px] font-mono">
                       <span>
                         Ср. сахар: <strong>{summary.avgGlucose !== null ? `${summary.avgGlucose} ммоль/л` : '—'}</strong>
                       </span>
-                      <span>РинФаст: <strong>{summary.totalRinFast} ед</strong></span>
-                      {summary.totalTresiba > 0 && <span>Тресиба: <strong>{summary.totalTresiba} ед</strong></span>}
+                      <span>{bolusName}: <strong>{summary.totalRinFast} ед</strong></span>
+                      {summary.totalTresiba > 0 && <span>{basalName}: <strong>{summary.totalTresiba} ед</strong></span>}
                       {summary.totalCarbs > 0 && <span>Углеводы: <strong>{summary.totalCarbs} г ({summary.totalXE} ХЕ)</strong></span>}
                       {summary.totalCalories > 0 && <span>Ккал: <strong>{summary.totalCalories}</strong></span>}
                     </div>
@@ -278,8 +334,8 @@ export const DoctorReportPdf: React.FC<DoctorReportPdfProps> = ({
                         <th className="py-1.5 px-3 w-28">Оценка</th>
                         <th className="py-1.5 px-2 w-20 text-center">Углеводы</th>
                         <th className="py-1.5 px-2 w-16 text-center">ХЕ (÷12)</th>
-                        <th className="py-1.5 px-2 w-24 text-center">РинФаст</th>
-                        <th className="py-1.5 px-2 w-24 text-center">Тресиба</th>
+                        <th className="py-1.5 px-2 w-24 text-center">{bolusName}</th>
+                        <th className="py-1.5 px-2 w-24 text-center">{basalName}</th>
                         <th className="py-1.5 px-2 w-20 text-center">Ккал</th>
                         <th className="py-1.5 px-3">Еда / нагрузка / комментарий</th>
                       </tr>
@@ -290,8 +346,8 @@ export const DoctorReportPdf: React.FC<DoctorReportPdfProps> = ({
 
                         return (
                           <tr key={e.id} className="text-slate-800">
-                            <td className="py-1.5 px-3 font-mono font-bold">{e.time}</td>
-                            <td className="py-1.5 px-3 font-mono font-extrabold">
+                            <td className="py-1.5 px-3 font-mono font-bold tabular-nums">{e.time}</td>
+                            <td className="py-1.5 px-3 font-mono font-extrabold tabular-nums">
                               {e.glucose !== null ? `${e.glucose.toFixed(1)} ммоль/л` : '—'}
                             </td>
                             <td className="py-1.5 px-3">
@@ -313,17 +369,17 @@ export const DoctorReportPdf: React.FC<DoctorReportPdfProps> = ({
                                 '—'
                               )}
                             </td>
-                            <td className="py-1.5 px-2 text-center">{e.carbs ? `${e.carbs} г` : '—'}</td>
-                            <td className="py-1.5 px-2 text-center font-bold text-teal-800">
+                            <td className="py-1.5 px-2 text-center font-mono tabular-nums">{e.carbs ? `${e.carbs} г` : '—'}</td>
+                            <td className="py-1.5 px-2 text-center font-bold text-teal-800 font-mono tabular-nums">
                               {e.xe ? `${e.xe} ХЕ` : '—'}
                             </td>
-                            <td className="py-1.5 px-2 text-center font-bold text-blue-800">
+                            <td className="py-1.5 px-2 text-center font-bold text-blue-800 font-mono tabular-nums">
                               {e.rinFast ? `${e.rinFast} ед` : '—'}
                             </td>
-                            <td className="py-1.5 px-2 text-center font-bold text-purple-800">
+                            <td className="py-1.5 px-2 text-center font-bold text-purple-800 font-mono tabular-nums">
                               {e.tresiba ? `${e.tresiba} ед` : '—'}
                             </td>
-                            <td className="py-1.5 px-2 text-center text-slate-700">{e.calories ? e.calories : '—'}</td>
+                            <td className="py-1.5 px-2 text-center text-slate-700 font-mono tabular-nums">{e.calories ? e.calories : '—'}</td>
                             <td className="py-1.5 px-3 text-slate-700 italic">
                               {e.notes || '—'}
                             </td>

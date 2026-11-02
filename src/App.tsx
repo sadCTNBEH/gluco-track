@@ -329,6 +329,8 @@ export default function App() {
                 <div className="hidden md:block">
                   <DiaryTable
                     entries={entries}
+                    bolusName={settings.bolusName}
+                    basalName={settings.basalName}
                     onAddClick={() => {
                       setEditingEntry(null);
                       setIsEntryModalOpen(true);
@@ -342,6 +344,8 @@ export default function App() {
                   {viewMode === 'cards' ? (
                     <MobileCardView
                       entries={entries}
+                      bolusName={settings.bolusName}
+                      basalName={settings.basalName}
                       onAddClick={() => {
                         setEditingEntry(null);
                         setIsEntryModalOpen(true);
@@ -353,6 +357,8 @@ export default function App() {
                   ) : (
                     <DiaryTable
                       entries={entries}
+                      bolusName={settings.bolusName}
+                      basalName={settings.basalName}
                       onAddClick={() => {
                         setEditingEntry(null);
                         setIsEntryModalOpen(true);
@@ -367,7 +373,11 @@ export default function App() {
             )}
 
             {activeTab === 'charts' && (
-              <MonthlyCharts entries={entries} />
+              <MonthlyCharts
+                entries={entries}
+                bolusName={settings.bolusName}
+                basalName={settings.basalName}
+              />
             )}
 
             {activeTab === 'report' && (
@@ -404,6 +414,8 @@ export default function App() {
         onSave={handleSaveEntry}
         initialEntry={editingEntry}
         xeRatio={settings.xeRatio}
+        bolusName={settings.bolusName}
+        basalName={settings.basalName}
       />
 
       {/* Модальное окно настроек */}

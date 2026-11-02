@@ -19,6 +19,8 @@ interface MobileCardViewProps {
   onEditClick: (entry: DiaryEntry) => void;
   onDeleteClick: (id: string) => void;
   onDeleteDayClick?: (date: string, count: number) => void;
+  bolusName?: string;
+  basalName?: string;
 }
 
 const TAG_CONFIG: Record<string, { label: string; className: string }> = {
@@ -38,6 +40,8 @@ export const MobileCardView: React.FC<MobileCardViewProps> = ({
   onEditClick,
   onDeleteClick,
   onDeleteDayClick,
+  bolusName = 'РинФаст',
+  basalName = 'Тресиба',
 }) => {
   const groupedDays = groupEntriesByDay(entries);
 
@@ -99,17 +103,17 @@ export const MobileCardView: React.FC<MobileCardViewProps> = ({
                   </div>
                 </div>
 
-                {/* РинФаст */}
+                {/* Болюс */}
                 <div className="bg-white dark:bg-slate-900 p-2 rounded-lg border border-blue-200/60 dark:border-blue-900/40">
-                  <div className="text-xs text-blue-700 dark:text-blue-300 font-medium">РинФаст</div>
+                  <div className="text-xs text-blue-700 dark:text-blue-300 font-medium truncate">{bolusName}</div>
                   <div className="font-mono font-bold text-sm text-blue-800 dark:text-blue-300">
                     {summary.totalRinFast} <span className="text-xs font-normal">ед</span>
                   </div>
                 </div>
 
-                {/* Тресиба */}
+                {/* Базал */}
                 <div className="bg-white dark:bg-slate-900 p-2 rounded-lg border border-purple-200/60 dark:border-purple-900/40">
-                  <div className="text-xs text-purple-700 dark:text-purple-300 font-medium">Тресиба</div>
+                  <div className="text-xs text-purple-700 dark:text-purple-300 font-medium truncate">{basalName}</div>
                   <div className="font-mono font-bold text-sm text-purple-800 dark:text-purple-300">
                     {summary.totalTresiba > 0 ? (
                       <>{summary.totalTresiba} <span className="text-xs font-normal">ед</span></>
@@ -187,14 +191,14 @@ export const MobileCardView: React.FC<MobileCardViewProps> = ({
                       {entry.rinFast !== null && entry.rinFast > 0 && (
                         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800 font-bold">
                           <Syringe className="w-3 h-3 text-blue-600 dark:text-blue-400 shrink-0" />
-                          РинФаст {entry.rinFast} ед
+                          {bolusName} {entry.rinFast} ед
                         </span>
                       )}
 
                       {entry.tresiba !== null && entry.tresiba > 0 && (
                         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-purple-50 dark:bg-purple-950/40 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-800 font-bold">
                           <Moon className="w-3 h-3 text-purple-600 dark:text-purple-400 shrink-0" />
-                          Тресиба {entry.tresiba} ед
+                          {basalName} {entry.tresiba} ед
                         </span>
                       )}
 

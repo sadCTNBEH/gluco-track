@@ -8,6 +8,8 @@ export const DEFAULT_SETTINGS: UserSettings = {
   targetHigh: 9.9,
   hypoThreshold: 3.9,
   severeHyperThreshold: 13.9,
+  bolusName: 'РинФаст',
+  basalName: 'Тресиба',
   doctorName: '',
   doctorNotes: 'Инсулинотерапия: РинФаст (ультракороткий) + Тресиба (базальный сверхдлительный). Целевой диапазон гликемии: 4.0 – 9.9 ммоль/л.',
 };
@@ -197,6 +199,55 @@ export function groupEntriesByDay(entries: DiaryEntry[]): { date: string; entrie
 }
 
 /**
+ * Определение периода суток для записи:
+ * Утро (завтрак, натощак, 06:00–11:59)
+ * День (обед, 12:00–17:59)
+ * Вечер (ужин, 18:00–22:59)
+ * Ночь (на ночь, 23:00–05:59)
+ */
+export function getEntryPeriod(entry: DiaryEntry): 'morning' | 'day' | 'evening' | 'night' {
+  if (entry.tag === 'breakfast' || entry.tag === 'fasting') return 'morning';
+  if (entry.tag === 'lunch') return 'day';
+  if (entry.tag === 'dinner') return 'evening';
+  if (entry.tag === 'bedtime' || entry.tag === 'night') return 'night';
+
+  const lowerNote = (entry.notes || '').toLowerCase();
+  if (lowerNote.includes('завтрак') || lowerNote.includes('утро') || lowerNote.includes('натощак')) return 'morning';
+  if (lowerNote.includes('обед') || lowerNote.includes('день') || lowerNote.includes('полдник')) return 'day';
+  if (lowerNote.includes('ужин') || lowerNote.includes('вечер')) return 'evening';
+  if (lowerNote.includes('ночь') || lowerNote.includes('сон') || lowerNote.includes('на ночь')) return 'night';
+
+  const hour = parseInt((entry.time || '12:00').split(':')[0], 10);
+  if (!isNaN(hour)) {
+    if (hour >= 6 && hour < 12) return 'morning';
+    if (hour >= 12 && hour < 18) return 'day';
+    if (hour >= 18 && hour < 23) return 'evening';
+    return 'night';
+  }
+  return 'day';
+}
+
+/**
+ * Проверка, является ли день полным (указаны утро, день, вечер и ночь)
+ */
+export function isDayComplete(dayEntries: DiaryEntry[]): boolean {
+  let hasMorning = false;
+  let hasDay = false;
+  let hasEvening = false;
+  let hasNight = false;
+
+  for (const entry of dayEntries) {
+    const period = getEntryPeriod(entry);
+    if (period === 'morning') hasMorning = true;
+    else if (period === 'day') hasDay = true;
+    else if (period === 'evening') hasEvening = true;
+    else if (period === 'night') hasNight = true;
+  }
+
+  return hasMorning && hasDay && hasEvening && hasNight;
+}
+
+/**
  * Расчет статистики за месяц
  */
 export function calculateMonthlyStats(entries: DiaryEntry[], monthStr?: string): MonthlyStats {
@@ -216,9 +267,12 @@ export function calculateMonthlyStats(entries: DiaryEntry[], monthStr?: string):
   let totalCalories = 0;
 
   const activeDays = new Set<string>();
+  const daysMap: Record<string, DiaryEntry[]> = {};
 
   for (const entry of monthEntries) {
     activeDays.add(entry.date);
+    if (!daysMap[entry.date]) daysMap[entry.date] = [];
+    daysMap[entry.date].push(entry);
 
     if (entry.glucose !== null && entry.glucose > 0) {
       glucoseSum += entry.glucose;
@@ -257,6 +311,22 @@ export function calculateMonthlyStats(entries: DiaryEntry[], monthStr?: string):
     veryHighPercent: glucoseCount > 0 ? Math.round((veryHighCount / tirTotal) * 100) : 0,
   };
 
+  // Расчет среднесуточного болюса (РинФаст) по полным дням (где указаны утро, день, вечер и ночь)
+  const fullDaysEntries = Object.entries(daysMap).filter(([_, dayList]) => isDayComplete(dayList));
+  const fullDaysCount = fullDaysEntries.length;
+
+  let avgDailyRinFast: number;
+  if (fullDaysCount > 0) {
+    const fullDaysRinFastSum = fullDaysEntries.reduce((sum, [_, dayList]) => {
+      return sum + dayList.reduce((s, e) => s + (e.rinFast || 0), 0);
+    }, 0);
+    avgDailyRinFast = Number((fullDaysRinFastSum / fullDaysCount).toFixed(1));
+  } else {
+    const daysWithRinFast = Object.values(daysMap).filter((d) => d.some((e) => (e.rinFast || 0) > 0));
+    const denom = daysWithRinFast.length || activeDaysCount;
+    avgDailyRinFast = Number((totalRinFast / denom).toFixed(1));
+  }
+
   return {
     month: targetMonth,
     totalEntries: monthEntries.length,
@@ -264,7 +334,7 @@ export function calculateMonthlyStats(entries: DiaryEntry[], monthStr?: string):
     estimatedHbA1c,
     tir,
     totalRinFast: Number(totalRinFast.toFixed(1)),
-    avgDailyRinFast: Number((totalRinFast / activeDaysCount).toFixed(1)),
+    avgDailyRinFast,
     totalTresiba: Number(totalTresiba.toFixed(1)),
     avgDailyTresiba: Number((totalTresiba / activeDaysCount).toFixed(1)),
     totalCarbs: Math.round(totalCarbs),
@@ -272,6 +342,7 @@ export function calculateMonthlyStats(entries: DiaryEntry[], monthStr?: string):
     totalCalories: Math.round(totalCalories),
     avgDailyCalories: Math.round(totalCalories / activeDaysCount),
     activeDaysCount: activeDays.size,
+    fullDaysCount,
   };
 }
 

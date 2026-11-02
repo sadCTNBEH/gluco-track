@@ -23,6 +23,8 @@ interface DiaryTableProps {
   onEditClick: (entry: DiaryEntry) => void;
   onDeleteClick: (id: string) => void;
   onDeleteDayClick?: (date: string, count: number) => void;
+  bolusName?: string;
+  basalName?: string;
 }
 
 const TAG_CONFIG: Record<string, { label: string; className: string }> = {
@@ -42,6 +44,8 @@ export const DiaryTable: React.FC<DiaryTableProps> = ({
   onEditClick,
   onDeleteClick,
   onDeleteDayClick,
+  bolusName = 'РинФаст',
+  basalName = 'Тресиба',
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [periodFilter, setPeriodFilter] = useState<'all' | 'today' | '7d' | '14d' | '30d'>('all');
@@ -221,19 +225,19 @@ export const DiaryTable: React.FC<DiaryTableProps> = ({
                       </div>
                     ) : null}
 
-                    {/* РинФаст за день */}
+                    {/* Болюс за день */}
                     {summary.totalRinFast > 0 && (
                       <div className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-300 font-semibold">
                         <Syringe className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                        <span>РинФаст: <strong className="font-mono">{summary.totalRinFast} ед</strong></span>
+                        <span>{bolusName}: <strong className="font-mono">{summary.totalRinFast} ед</strong></span>
                       </div>
                     )}
 
-                    {/* Тресиба за день */}
+                    {/* Базал за день */}
                     {summary.totalTresiba > 0 && (
                       <div className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 text-purple-800 dark:text-purple-300 font-semibold">
                         <Moon className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
-                        <span>Тресиба: <strong className="font-mono">{summary.totalTresiba} ед</strong></span>
+                        <span>{basalName}: <strong className="font-mono">{summary.totalTresiba} ед</strong></span>
                       </div>
                     )}
 
@@ -279,8 +283,8 @@ export const DiaryTable: React.FC<DiaryTableProps> = ({
                         <th className="py-2.5 px-4 w-36">Статус</th>
                         <th className="py-2.5 px-3 w-24 text-center">Углеводы</th>
                         <th className="py-2.5 px-3 w-28 text-center">ХЕ (÷12)</th>
-                        <th className="py-2.5 px-3 w-28 text-center text-blue-700 dark:text-blue-300">РинФаст</th>
-                        <th className="py-2.5 px-3 w-28 text-center text-purple-700 dark:text-purple-300">Тресиба</th>
+                        <th className="py-2.5 px-3 w-28 text-center text-blue-700 dark:text-blue-300">{bolusName}</th>
+                        <th className="py-2.5 px-3 w-28 text-center text-purple-700 dark:text-purple-300">{basalName}</th>
                         <th className="py-2.5 px-3 w-24 text-center text-rose-700 dark:text-rose-300">Ккал</th>
                         <th className="py-2.5 px-4">Еда / примечания</th>
                         <th className="py-2.5 px-3 w-20 text-right">Действия</th>

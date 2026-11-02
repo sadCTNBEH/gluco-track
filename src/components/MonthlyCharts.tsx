@@ -19,9 +19,15 @@ import {
 
 interface MonthlyChartsProps {
   entries: DiaryEntry[];
+  bolusName?: string;
+  basalName?: string;
 }
 
-export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({ entries }) => {
+export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({
+  entries,
+  bolusName = 'РинФаст',
+  basalName = 'Тресиба',
+}) => {
   // Список доступных месяцев
   const availableMonths = useMemo(() => {
     const monthsSet = new Set<string>();
@@ -257,7 +263,7 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({ entries }) => {
             <span className="text-xs font-normal text-slate-400 font-sans">ед/сут</span>
           </div>
           <div className="text-xs text-slate-400">
-            РинФаст (болюс) + Тресиба (базал)
+            {bolusName} (болюс) + {basalName} (базал)
           </div>
         </div>
       </div>
@@ -653,20 +659,20 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({ entries }) => {
           <div>
             <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
               <Syringe className="w-4 h-4 text-slate-400" />
-              Суточные дозировки инсулинов (РинФаст vs Тресиба)
+              Суточные дозировки инсулинов ({bolusName} vs {basalName})
             </h3>
             <p className="text-xs text-slate-400">
-              Соотношение болюсного (РинФаст) и базального (Тресиба) инсулина по дням
+              Соотношение болюсного ({bolusName}) и базального ({basalName}) инсулина по дням
             </p>
           </div>
           <div className="flex items-center gap-3 text-xs font-semibold">
             <span className="flex items-center gap-1.5 text-blue-700 dark:text-blue-400">
               <span className="w-3 h-3 rounded bg-blue-600" />
-              <span>РинФаст (болюс)</span>
+              <span>{bolusName} (болюс)</span>
             </span>
             <span className="flex items-center gap-1.5 text-purple-700 dark:text-purple-400">
               <span className="w-3 h-3 rounded bg-purple-600" />
-              <span>Тресиба (базал)</span>
+              <span>{basalName} (базал)</span>
             </span>
           </div>
         </div>
@@ -688,19 +694,19 @@ export const MonthlyCharts: React.FC<MonthlyChartsProps> = ({ entries }) => {
                     {/* Тултип */}
                     <div className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity absolute -top-12 z-20 pointer-events-none bg-slate-900 text-white text-xs p-2 rounded-lg whitespace-nowrap shadow-md border border-slate-700 font-mono">
                       <div className="font-bold">{d.date}</div>
-                      <div>РинФаст: {d.rinFast} ед • Тресиба: {d.tresiba} ед</div>
+                      <div>{bolusName}: {d.rinFast} ед • {basalName}: {d.tresiba} ед</div>
                     </div>
 
                     <div className="w-full flex items-end justify-center gap-0.5 h-28">
                       <div
                         style={{ height: `${rfHeight}%` }}
                         className="w-1/2 bg-blue-600 rounded-t-sm"
-                        title={`${d.date} - РинФаст: ${d.rinFast} ед`}
+                        title={`${d.date} - ${bolusName}: ${d.rinFast} ед`}
                       />
                       <div
                         style={{ height: `${trHeight}%` }}
                         className="w-1/2 bg-purple-600 rounded-t-sm"
-                        title={`${d.date} - Тресиба: ${d.tresiba} ед`}
+                        title={`${d.date} - ${basalName}: ${d.tresiba} ед`}
                       />
                     </div>
                     <span className="text-xs text-slate-400 font-mono">

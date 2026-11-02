@@ -36,6 +36,8 @@ export interface UserSettings {
   targetHigh: number; // 9.9
   hypoThreshold: number; // 3.9
   severeHyperThreshold: number; // 13.9
+  bolusName?: string; // название болюсного инсулина (по умолчанию 'РинФаст')
+  basalName?: string; // название базального инсулина (по умолчанию 'Тресиба')
   doctorName?: string;
   doctorNotes?: string;
 }
@@ -64,4 +66,5 @@ export interface MonthlyStats {
   totalCalories: number;
   avgDailyCalories: number;
   activeDaysCount: number;
+  fullDaysCount?: number; // количество дней, где заполнены утро, день, вечер и ночь
 }

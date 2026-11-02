@@ -7,6 +7,9 @@ import {
   Trash2,
   FileSpreadsheet,
   Loader2,
+  Syringe,
+  Moon,
+  AlertTriangle,
 } from 'lucide-react';
 import { Modal } from './ui/Modal';
 import { Button } from './ui/Button';
@@ -34,6 +37,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [exportingXlsx, setExportingXlsx] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   // Экспорт данных в файл Excel (.xlsx)
   const handleExportXLSX = async () => {
@@ -100,16 +104,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   return (
     <Modal
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={() => {
+        setShowClearConfirm(false);
+        onClose();
+      }}
       title="Настройки и управление данными"
-      subtitle="Параметры ХЕ, экспорт в Excel и резервные копии"
+      subtitle="Параметры ХЕ, инсулины, экспорт и резервные копии"
       maxWidth="max-w-xl"
     >
-      <div className="space-y-6 text-xs">
+      <div className="space-y-5 text-xs">
+        
         {/* Персональные данные */}
         <div className="space-y-3">
           <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-            Данные пациента
+            Данные пациента и углеводы
           </h4>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             <div>
@@ -155,39 +163,88 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
         </div>
 
-        {/* Экспорт и импорт в Excel / JSON */}
+        {/* Названия используемых инсулинов */}
         <div className="space-y-3 pt-4 border-t border-slate-100 dark:border-slate-800">
           <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-            Экспорт и импорт данных
+            Используемые препараты инсулина
           </h4>
-          <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
-            Выгружайте записи в формате Excel (.xlsx) для врача или резервной копии, а также загружайте сохраненные файлы.
-          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <div>
+              <label
+                htmlFor="settings-bolus-name"
+                className="block text-slate-700 dark:text-slate-300 font-semibold mb-1.5 flex items-center gap-1.5"
+              >
+                <Syringe className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                Болюсный (короткий на еду):
+              </label>
+              <input
+                id="settings-bolus-name"
+                type="text"
+                value={settings.bolusName ?? 'РинФаст'}
+                onChange={(e) => onUpdateSettings({ ...settings, bolusName: e.target.value })}
+                placeholder="Например: РинФаст, НовоРапид, Хумалог"
+                className="w-full min-h-[44px] px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-colors"
+              />
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
+                По умолчанию: РинФаст
+              </p>
+            </div>
 
-          <div className="flex flex-wrap gap-2.5">
-            {/* Экспорт в Excel (.xlsx) */}
+            <div>
+              <label
+                htmlFor="settings-basal-name"
+                className="block text-slate-700 dark:text-slate-300 font-semibold mb-1.5 flex items-center gap-1.5"
+              >
+                <Moon className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                Базальный (длинный на ночь):
+              </label>
+              <input
+                id="settings-basal-name"
+                type="text"
+                value={settings.basalName ?? 'Тресиба'}
+                onChange={(e) => onUpdateSettings({ ...settings, basalName: e.target.value })}
+                placeholder="Например: Тресиба, Лантус, Туджео"
+                className="w-full min-h-[44px] px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-colors"
+              />
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
+                По умолчанию: Тресиба
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Экспорт и импорт Excel (.xlsx) */}
+        <div className="space-y-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+          <div className="flex items-center justify-between">
+            <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+              Таблицы Excel (.xlsx)
+            </h4>
+            <span className="text-[10px] text-slate-400">Для врача и анализа</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             <Button
               type="button"
               variant="outline"
               size="md"
               onClick={handleExportXLSX}
               disabled={exportingXlsx || entries.length === 0}
-              className="text-teal-700 dark:text-teal-300 border-teal-300 dark:border-teal-800 hover:bg-teal-50 dark:hover:bg-teal-950/40"
+              className="w-full justify-center border-slate-300 dark:border-slate-700 hover:border-emerald-500 dark:hover:border-emerald-500 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/30"
             >
               {exportingXlsx ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin text-teal-600" />
-                  <span>Формирование Excel...</span>
+                  <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
+                  <span>Формирование...</span>
                 </>
               ) : (
                 <>
-                  <FileSpreadsheet className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                   <span>Экспорт в Excel (.xlsx)</span>
                 </>
               )}
             </Button>
 
-            {/* Импорт из Excel (.xlsx) */}
             <Button
               type="button"
               variant="outline"
@@ -196,33 +253,48 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 onClose();
                 onOpenExcelImport();
               }}
-              className="text-slate-700 dark:text-slate-300"
+              className="w-full justify-center border-slate-300 dark:border-slate-700 hover:border-emerald-500 dark:hover:border-emerald-500 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/30"
             >
-              <Upload className="w-4 h-4 text-slate-500" />
-              <span>Импорт из Excel</span>
+              <Upload className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              <span>Импорт из Excel (.xlsx)</span>
             </Button>
+          </div>
+        </div>
 
-            {/* Экспорт в JSON */}
+        {/* Экспорт и импорт JSON (Резервная копия) */}
+        <div className="space-y-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+          <div className="flex items-center justify-between">
+            <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+              <Download className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+              Резервные копии JSON
+            </h4>
+            <span className="text-[10px] text-slate-400">Полный бэкап настроек и данных</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             <Button
               type="button"
-              variant="ghost"
+              variant="outline"
               size="md"
               onClick={handleExportJSON}
+              disabled={entries.length === 0}
+              className="w-full justify-center border-slate-300 dark:border-slate-700 hover:border-teal-500 dark:hover:border-teal-500 hover:bg-teal-50/50 dark:hover:bg-teal-950/30"
             >
-              <Download className="w-4 h-4 text-slate-500" />
-              <span>Экспорт JSON</span>
+              <Download className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+              <span>Экспорт в JSON</span>
             </Button>
 
-            {/* Импорт из JSON */}
             <Button
               type="button"
-              variant="ghost"
+              variant="outline"
               size="md"
               onClick={() => fileInputRef.current?.click()}
+              className="w-full justify-center border-slate-300 dark:border-slate-700 hover:border-teal-500 dark:hover:border-teal-500 hover:bg-teal-50/50 dark:hover:bg-teal-950/30"
             >
-              <Upload className="w-4 h-4 text-slate-500" />
-              <span>Импорт JSON</span>
+              <Upload className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+              <span>Импорт из JSON</span>
             </Button>
+
             <input
               ref={fileInputRef}
               type="file"
@@ -233,39 +305,81 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
         </div>
 
-        {/* Быстрые действия с базой */}
+        {/* Очистка данных с подтверждением */}
         <div className="space-y-3 pt-4 border-t border-slate-100 dark:border-slate-800">
           <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-            Очистка данных
+            Управление хранилищем
           </h4>
-          <div>
-            <Button
-              type="button"
-              variant="danger"
-              size="sm"
-              onClick={() => {
-                if (
-                  confirm(
-                    'ВНИМАНИЕ: Вы действительно хотите удалить ВСЕ записи из дневника? Это действие необратимо.'
-                  )
-                ) {
-                  onClearAll();
-                  onClose();
-                }
-              }}
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>Очистить дневник</span>
-            </Button>
-          </div>
+
+          {!showClearConfirm ? (
+            <div className="p-3.5 rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/50 dark:bg-rose-950/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="text-xs text-rose-800 dark:text-rose-300">
+                <span className="font-semibold block mb-0.5">Очистить дневник самоконтроля</span>
+                Безвозвратное удаление всех {entries.length} записей из базы данных SQLite.
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="md"
+                onClick={() => setShowClearConfirm(true)}
+                disabled={entries.length === 0}
+                className="w-full sm:w-auto shrink-0 border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300 hover:bg-rose-100/70 dark:hover:bg-rose-950/40"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Очистить дневник</span>
+              </Button>
+            </div>
+          ) : (
+            <div className="p-4 rounded-xl border-2 border-rose-500 bg-rose-50 dark:bg-rose-950/40 space-y-3 animate-fadeIn">
+              <div className="flex items-center gap-2 text-rose-800 dark:text-rose-200 font-bold text-xs sm:text-sm">
+                <AlertTriangle className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0" />
+                <span>Вы уверены, что хотите удалить все {entries.length} записей?</span>
+              </div>
+              <p className="text-xs text-rose-700 dark:text-rose-300 leading-relaxed">
+                Это действие необратимо. Будут удалены все замеры сахара, дозировки инсулина и история питания.
+              </p>
+              <div className="flex items-center gap-2 pt-1">
+                <Button
+                  type="button"
+                  variant="danger"
+                  size="md"
+                  onClick={() => {
+                    onClearAll();
+                    setShowClearConfirm(false);
+                    onClose();
+                  }}
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Да, удалить всё</span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="md"
+                  onClick={() => setShowClearConfirm(false)}
+                >
+                  Отмена
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
         <div className="flex justify-end pt-4 border-t border-slate-100 dark:border-slate-800">
-          <Button type="button" variant="primary" size="md" onClick={onClose}>
+          <Button
+            type="button"
+            variant="primary"
+            size="md"
+            onClick={() => {
+              setShowClearConfirm(false);
+              onClose();
+            }}
+          >
             Готово
           </Button>
         </div>
+
       </div>
     </Modal>
   );

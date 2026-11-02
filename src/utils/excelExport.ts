@@ -24,6 +24,9 @@ export async function exportEntriesToXLSX(
     return (a.time || '').localeCompare(b.time || '');
   });
 
+  const bolusName = settings?.bolusName || 'РинФаст';
+  const basalName = settings?.basalName || 'Тресиба';
+
   const headerRow: Row = [
     { value: 'Дата', fontWeight: 'bold', backgroundColor: '#e2e8f0' },
     { value: 'Время', fontWeight: 'bold', backgroundColor: '#e2e8f0' },
@@ -31,8 +34,8 @@ export async function exportEntriesToXLSX(
     { value: 'Оценка', fontWeight: 'bold', backgroundColor: '#e2e8f0' },
     { value: 'Углеводы (г)', fontWeight: 'bold', backgroundColor: '#e2e8f0' },
     { value: 'ХЕ', fontWeight: 'bold', backgroundColor: '#e2e8f0' },
-    { value: 'РинФаст (ед)', fontWeight: 'bold', backgroundColor: '#e2e8f0' },
-    { value: 'Тресиба (ед)', fontWeight: 'bold', backgroundColor: '#e2e8f0' },
+    { value: `${bolusName} (ед)`, fontWeight: 'bold', backgroundColor: '#e2e8f0' },
+    { value: `${basalName} (ед)`, fontWeight: 'bold', backgroundColor: '#e2e8f0' },
     { value: 'Калории (ккал)', fontWeight: 'bold', backgroundColor: '#e2e8f0' },
     { value: 'Контекст', fontWeight: 'bold', backgroundColor: '#e2e8f0' },
     { value: 'Примечания / Еда', fontWeight: 'bold', backgroundColor: '#e2e8f0' },

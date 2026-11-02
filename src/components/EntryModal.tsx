@@ -9,6 +9,8 @@ interface EntryModalProps {
   onSave: (entry: Omit<DiaryEntry, 'id' | 'createdAt'> & { id?: string }) => void;
   initialEntry?: DiaryEntry | null;
   xeRatio?: number;
+  bolusName?: string;
+  basalName?: string;
 }
 
 const CONTEXT_TAGS = [
@@ -28,6 +30,8 @@ export const EntryModal: React.FC<EntryModalProps> = ({
   onSave,
   initialEntry,
   xeRatio = 12,
+  bolusName = 'РинФаст',
+  basalName = 'Тресиба',
 }) => {
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
@@ -297,11 +301,11 @@ export const EntryModal: React.FC<EntryModalProps> = ({
           {/* Инсулины: РинФаст и Тресиба с исправленными подписями кнопок */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             
-            {/* РинФаст (болюс) */}
+            {/* Болюс */}
             <div className="p-3.5 rounded-xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/80 dark:border-blue-900/60 space-y-2">
               <label htmlFor="entry-rinfast" className="block text-xs font-semibold text-blue-900 dark:text-blue-300 flex items-center gap-1.5">
                 <Syringe className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                РинФаст (болюс на еду/ДПС)
+                {bolusName} (болюс на еду/ДПС)
               </label>
 
               <div className="relative">
@@ -340,11 +344,11 @@ export const EntryModal: React.FC<EntryModalProps> = ({
               </div>
             </div>
 
-            {/* Тресиба (базал) */}
+            {/* Базал */}
             <div className="p-3.5 rounded-xl bg-purple-50/50 dark:bg-purple-950/20 border border-purple-200/80 dark:border-purple-900/60 space-y-2">
               <label htmlFor="entry-tresiba" className="block text-xs font-semibold text-purple-900 dark:text-purple-300 flex items-center gap-1.5">
                 <Moon className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
-                Тресиба (базальный на ночь)
+                {basalName} (базальный на ночь)
               </label>
 
               <div className="relative">
