@@ -375,6 +375,9 @@ export const DoctorReportPdf: React.FC<DoctorReportPdfProps> = ({
             <div>Врач-эндокринолог: _______________________ (подпись / печать)</div>
             <div>Дата проверки: «____» ____________ 202__ г.</div>
           </div>
+          <div className="text-[9px] text-slate-400 text-center pt-2 border-t border-slate-200">
+            Документ сформирован пациентом в системе электронного самоконтроля (gluco.zduben.ru) в соответствии со ст. 10 152-ФЗ РФ и 323-ФЗ РФ. Не является окончательным клиническим диагнозом.
+          </div>
         </div>
 
       </div>

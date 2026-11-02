@@ -16,6 +16,9 @@ import { EntryModal } from './components/EntryModal';
 import { SettingsModal } from './components/SettingsModal';
 import { AuthScreen } from './components/AuthScreen';
 import { ExcelImportModal } from './components/ExcelImportModal';
+import { PrivacyPolicyModal } from './components/PrivacyPolicyModal';
+import { CookieBanner } from './components/CookieBanner';
+import { Footer } from './components/Footer';
 import { api, AuthUser } from './api/client';
 import { Plus, Award, Loader2 } from 'lucide-react';
 
@@ -36,6 +39,13 @@ export default function App() {
   const [editingEntry, setEditingEntry] = useState<DiaryEntry | null>(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
+  const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState(false);
+  const [privacyModalTab, setPrivacyModalTab] = useState<'policy' | 'medical'>('policy');
+
+  const handleOpenPolicy = (tab: 'policy' | 'medical' = 'policy') => {
+    setPrivacyModalTab(tab);
+    setIsPrivacyModalOpen(true);
+  };
 
   // Загрузка данных пользователя с сервера
   const loadUserData = useCallback(async () => {
@@ -238,12 +248,21 @@ export default function App() {
   // Если не авторизован — показываем экран логина / регистрации
   if (!user) {
     return (
-      <AuthScreen
-        onSuccess={(authData) => {
-          setUser(authData.user);
-          loadUserData();
-        }}
-      />
+      <>
+        <AuthScreen
+          onSuccess={(authData) => {
+            setUser(authData.user);
+            loadUserData();
+          }}
+          onOpenPolicy={handleOpenPolicy}
+        />
+        <PrivacyPolicyModal
+          isOpen={isPrivacyModalOpen}
+          onClose={() => setIsPrivacyModalOpen(false)}
+          defaultTab={privacyModalTab}
+        />
+        <CookieBanner onOpenPolicy={() => handleOpenPolicy('policy')} />
+      </>
     );
   }
 
@@ -413,6 +432,22 @@ export default function App() {
         onClose={() => setIsExcelModalOpen(false)}
         onImport={handleExcelImport}
         xeRatio={settings.xeRatio}
+      />
+
+      {/* Модальное окно правовой информации и политики 152-ФЗ */}
+      <PrivacyPolicyModal
+        isOpen={isPrivacyModalOpen}
+        onClose={() => setIsPrivacyModalOpen(false)}
+        defaultTab={privacyModalTab}
+      />
+
+      {/* Уведомление об использовании Cookie и LocalStorage (152-ФЗ) */}
+      <CookieBanner onOpenPolicy={() => handleOpenPolicy('policy')} />
+
+      {/* Подвал сайта */}
+      <Footer
+        onOpenPolicy={() => handleOpenPolicy('policy')}
+        onOpenMedical={() => handleOpenPolicy('medical')}
       />
     </div>
   );
