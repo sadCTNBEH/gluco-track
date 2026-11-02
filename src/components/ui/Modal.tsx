@@ -8,9 +8,11 @@ export interface ModalProps {
   subtitle?: React.ReactNode;
   description?: React.ReactNode;
   icon?: React.ReactNode;
+  iconClassName?: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
   maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | string;
+  initialFocusRef?: React.RefObject<HTMLElement | null>;
 }
 
 const MAX_WIDTH_MAP: Record<string, string> = {
@@ -29,9 +31,11 @@ export const Modal: React.FC<ModalProps> = ({
   subtitle,
   description,
   icon,
+  iconClassName,
   children,
   footer,
   maxWidth = 'md',
+  initialFocusRef,
 }) => {
   const dialogRef = useRef<HTMLDivElement>(null);
   const previouslyFocusedElement = useRef<HTMLElement | null>(null);
@@ -45,13 +49,41 @@ export const Modal: React.FC<ModalProps> = ({
       const handleKeyDown = (e: KeyboardEvent) => {
         if (e.key === 'Escape') {
           onClose();
+          return;
+        }
+
+        // Accessible focus trap
+        if (e.key === 'Tab' && dialogRef.current) {
+          const focusableElements = dialogRef.current.querySelectorAll<HTMLElement>(
+            'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          );
+          if (focusableElements.length === 0) return;
+
+          const firstElement = focusableElements[0];
+          const lastElement = focusableElements[focusableElements.length - 1];
+
+          if (e.shiftKey) {
+            if (document.activeElement === firstElement || document.activeElement === dialogRef.current) {
+              e.preventDefault();
+              lastElement.focus();
+            }
+          } else {
+            if (document.activeElement === lastElement) {
+              e.preventDefault();
+              firstElement.focus();
+            }
+          }
         }
       };
       document.addEventListener('keydown', handleKeyDown);
       document.body.style.overflow = 'hidden';
 
-      // Focus modal container
-      dialogRef.current?.focus();
+      // Focus initialFocusRef or dialog container
+      if (initialFocusRef?.current) {
+        initialFocusRef.current.focus();
+      } else {
+        dialogRef.current?.focus();
+      }
 
       return () => {
         document.removeEventListener('keydown', handleKeyDown);
@@ -59,7 +91,7 @@ export const Modal: React.FC<ModalProps> = ({
         previouslyFocusedElement.current?.focus();
       };
     }
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, initialFocusRef]);
 
   if (!isOpen) return null;
 
@@ -86,7 +118,12 @@ export const Modal: React.FC<ModalProps> = ({
           <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900">
             <div className="flex items-center gap-3 min-w-0 pr-2">
               {icon && (
-                <div className="w-9 h-9 rounded-xl bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 flex items-center justify-center shrink-0">
+                <div
+                  className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${
+                    iconClassName ||
+                    'bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border-teal-200 dark:border-teal-800'
+                  }`}
+                >
                   {icon}
                 </div>
               )}

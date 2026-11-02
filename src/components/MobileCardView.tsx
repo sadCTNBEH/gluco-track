@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { DiaryEntry, UserSettings } from '../types/diabetes';
 import { evaluateGlucose, groupEntriesByDay, formatDateRussian } from '../utils/diabetes';
+import { getDiaryTagConfig } from '../constants/diaryTags';
 import {
   Syringe,
   Moon,
@@ -11,6 +12,9 @@ import {
   Clock,
   Plus,
   Activity,
+  CloudOff,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react';
 
 interface MobileCardViewProps {
@@ -24,18 +28,7 @@ interface MobileCardViewProps {
   settings?: UserSettings;
 }
 
-const TAG_CONFIG: Record<string, { label: string; className: string }> = {
-  fasting: { label: 'Натощак', className: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300' },
-  breakfast: { label: 'Завтрак', className: 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800' },
-  lunch: { label: 'Обед', className: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' },
-  dinner: { label: 'Ужин', className: 'bg-blue-50 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800' },
-  snack: { label: 'Перекус', className: 'bg-teal-50 dark:bg-teal-950/40 text-teal-800 dark:text-teal-300 border border-teal-200 dark:border-teal-800' },
-  bedtime: { label: 'На ночь', className: 'bg-purple-50 dark:bg-purple-950/40 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-800' },
-  correction: { label: 'Коррекция (ДПС)', className: 'bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800' },
-  other: { label: 'Другое', className: 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400' },
-};
-
-export const MobileCardView: React.FC<MobileCardViewProps> = ({
+export const MobileCardView: React.FC<MobileCardViewProps> = React.memo(({
   entries,
   onAddClick,
   onEditClick,
@@ -45,7 +38,9 @@ export const MobileCardView: React.FC<MobileCardViewProps> = ({
   basalName = 'Тресиба',
   settings,
 }) => {
-  const groupedDays = groupEntriesByDay(entries);
+  const groupedDays = useMemo(() => {
+    return groupEntriesByDay(entries);
+  }, [entries]);
 
   if (groupedDays.length === 0) {
     return (
@@ -149,7 +144,7 @@ export const MobileCardView: React.FC<MobileCardViewProps> = ({
             <div className="space-y-2 pt-1">
               {dayEntries.map((entry) => {
                 const evalResult = evaluateGlucose(entry.glucose, settings);
-                const tagInfo = entry.tag && entry.tag !== 'other' ? TAG_CONFIG[entry.tag] : null;
+                const tagInfo = getDiaryTagConfig(entry.tag);
 
                 return (
                   <div
@@ -158,14 +153,38 @@ export const MobileCardView: React.FC<MobileCardViewProps> = ({
                   >
                     {/* Top Row: Time, Tag, Glucose with Badge */}
                     <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5 text-slate-400" />
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                         <span className="font-mono font-bold text-xs text-slate-900 dark:text-white tabular-nums">
                           {entry.time}
                         </span>
                         {tagInfo && (
                           <span className={`text-[10px] px-2 py-0.2 rounded-md font-sans font-medium ${tagInfo.className}`}>
                             {tagInfo.label}
+                          </span>
+                        )}
+                        {entry._syncStatus === 'saving' && (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.2 rounded border border-amber-200 dark:border-amber-800">
+                            <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                            <span>Сохранение</span>
+                          </span>
+                        )}
+                        {entry._syncStatus === 'pending' && (
+                          <span
+                            className="inline-flex items-center gap-1 text-[10px] text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950/40 px-1.5 py-0.2 rounded border border-sky-200 dark:border-sky-800"
+                            title={entry._syncError || 'Ожидает отправки на сервер'}
+                          >
+                            <CloudOff className="w-2.5 h-2.5" />
+                            <span>Офлайн</span>
+                          </span>
+                        )}
+                        {entry._syncStatus === 'error' && (
+                          <span
+                            className="inline-flex items-center gap-1 text-[10px] text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 px-1.5 py-0.2 rounded border border-rose-200 dark:border-rose-800"
+                            title={entry._syncError || 'Ошибка синхронизации'}
+                          >
+                            <AlertCircle className="w-2.5 h-2.5" />
+                            <span>Ошибка</span>
                           </span>
                         )}
                       </div>
@@ -259,4 +278,6 @@ export const MobileCardView: React.FC<MobileCardViewProps> = ({
       })}
     </div>
   );
-};
+});
+
+MobileCardView.displayName = 'MobileCardView';

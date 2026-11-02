@@ -1,4 +1,5 @@
-import { DiaryEntry, GlucoseStatus, DaySummary, MonthlyStats, UserSettings } from '../types/diabetes';
+import { DiaryEntry, GlucoseStatus, DaySummary, PeriodStats, MonthlyStats, UserSettings } from '../types/diabetes';
+import { getCurrentMonthString } from './dateTime';
 
 export const DEFAULT_SETTINGS: UserSettings = {
   patientName: 'Пациент',
@@ -306,18 +307,40 @@ export function calculateDailyInsulinAverages(daysMap: Record<string, DiaryEntry
 }
 
 /**
- * Расчет статистики за месяц (или по всем записям, если monthStr не передан)
+ * Расчет ориентировочного гликированного гемоглобина (eHbA1c / GMI) по стандартной формуле ADAG:
+ * eHbA1c (%) = (avgGlucose_mmol * 18.05 + 46.7) / 28.7
+ * Является единым источником расчетного HbA1c в приложении.
+ * Не заменяет лабораторный анализ HbA1c.
+ *
+ * @param avgGlucose Средняя гликемия в ммоль/л
+ * @returns Ориентировочный процент eHbA1c, округленный до 1 десятичного знака, или null
  */
-export function calculateMonthlyStats(
-  entries: DiaryEntry[],
-  monthStr?: string,
-  settings?: UserSettings
-): MonthlyStats {
-  const monthEntries = monthStr ? entries.filter((e) => e.date.startsWith(monthStr)) : entries;
-  const targetMonth = monthStr || (entries.length > 0 ? entries[0].date.slice(0, 7) : new Date().toISOString().slice(0, 7));
+export function calculateEstimatedHbA1c(avgGlucose: number | null | undefined): number | null {
+  if (
+    avgGlucose === null ||
+    avgGlucose === undefined ||
+    typeof avgGlucose !== 'number' ||
+    isNaN(avgGlucose) ||
+    !isFinite(avgGlucose) ||
+    avgGlucose <= 0
+  ) {
+    return null;
+  }
+  return Number(((avgGlucose * 18.05 + 46.7) / 28.7).toFixed(1));
+}
 
+/**
+ * Единый расчет сводной медицинской статистики за произвольный период (TIR, средняя, мин/макс глюкоза, инсулин, углеводы).
+ * Служит единым источником расчетов для дневника, графиков и PDF-отчета врача.
+ */
+export function calculatePeriodStats(
+  entries: DiaryEntry[],
+  settings?: UserSettings
+): PeriodStats {
   let glucoseSum = 0;
   let glucoseCount = 0;
+  let minGlucose: number | null = null;
+  let maxGlucose: number | null = null;
   let lowCount = 0;
   let normalCount = 0;
   let highCount = 0;
@@ -326,19 +349,27 @@ export function calculateMonthlyStats(
   let totalRinFast = 0;
   let totalTresiba = 0;
   let totalCarbs = 0;
+  let totalXE = 0;
   let totalCalories = 0;
 
   const activeDays = new Set<string>();
   const daysMap: Record<string, DiaryEntry[]> = {};
 
-  for (const entry of monthEntries) {
+  for (const entry of entries) {
     activeDays.add(entry.date);
     if (!daysMap[entry.date]) daysMap[entry.date] = [];
     daysMap[entry.date].push(entry);
 
-    if (entry.glucose !== null && entry.glucose > 0) {
+    if (entry.glucose !== null && entry.glucose !== undefined && entry.glucose > 0) {
       glucoseSum += entry.glucose;
       glucoseCount++;
+
+      if (minGlucose === null || entry.glucose < minGlucose) {
+        minGlucose = entry.glucose;
+      }
+      if (maxGlucose === null || entry.glucose > maxGlucose) {
+        maxGlucose = entry.glucose;
+      }
 
       const evaluation = evaluateGlucose(entry.glucose, settings);
       if (evaluation) {
@@ -349,17 +380,19 @@ export function calculateMonthlyStats(
       }
     }
 
-    if (entry.rinFast) totalRinFast += entry.rinFast;
-    if (entry.tresiba) totalTresiba += entry.tresiba;
-    if (entry.carbs) totalCarbs += entry.carbs;
-    if (entry.calories) totalCalories += entry.calories;
+    if (entry.rinFast && entry.rinFast > 0) totalRinFast += entry.rinFast;
+    if (entry.tresiba && entry.tresiba > 0) totalTresiba += entry.tresiba;
+    if (entry.carbs && entry.carbs > 0) totalCarbs += entry.carbs;
+    if (entry.xe && entry.xe > 0) totalXE += entry.xe;
+    if (entry.calories && entry.calories > 0) totalCalories += entry.calories;
   }
 
-  const activeDaysCount = activeDays.size || 1;
+  const activeDaysCount = activeDays.size;
+  const activeDaysDivisor = activeDaysCount || 1;
   const avgGlucose = glucoseCount > 0 ? Number((glucoseSum / glucoseCount).toFixed(1)) : null;
 
-  // Формула примерного расчета гликированного гемоглобина (HbA1c / GMI): (avgGlucose * 18.05 + 46.7) / 28.7
-  const estimatedHbA1c = avgGlucose ? Number(((avgGlucose * 18.05 + 46.7) / 28.7).toFixed(1)) : null;
+  // Единый расчет ориентировочного HbA1c (ADAG formula)
+  const estimatedHbA1c = calculateEstimatedHbA1c(avgGlucose);
 
   const tirTotal = glucoseCount || 1;
   const tir = {
@@ -376,62 +409,65 @@ export function calculateMonthlyStats(
   // Расчет среднесуточных доз болюса и базала по полным дням (где указаны утро, день и вечер)
   const insulinStats = calculateDailyInsulinAverages(daysMap);
 
+  const avgDailyRinFast = insulinStats.avgDailyRinFast;
+  const avgDailyTresiba = insulinStats.avgDailyTresiba;
+  const avgDailyCarbs = Math.round(totalCarbs / activeDaysDivisor);
+  const avgDailyCalories = Math.round(totalCalories / activeDaysDivisor);
+  const avgDailyXE = Number((totalXE / activeDaysDivisor).toFixed(1));
+
   return {
-    month: targetMonth,
-    totalEntries: monthEntries.length,
+    totalEntries: entries.length,
+    entriesCount: entries.length,
+    glucoseCount,
+    activeDaysCount,
+    activeDays: activeDaysCount,
     avgGlucose,
+    minGlucose: minGlucose !== null ? Number(minGlucose.toFixed(1)) : null,
+    maxGlucose: maxGlucose !== null ? Number(maxGlucose.toFixed(1)) : null,
     estimatedHbA1c,
     tir,
     totalRinFast: Number(totalRinFast.toFixed(1)),
-    avgDailyRinFast: insulinStats.avgDailyRinFast,
+    avgDailyRinFast,
+    avgRinFast: avgDailyRinFast,
     totalTresiba: Number(totalTresiba.toFixed(1)),
-    avgDailyTresiba: insulinStats.avgDailyTresiba,
+    avgDailyTresiba,
+    avgTresiba: avgDailyTresiba,
     totalCarbs: Math.round(totalCarbs),
-    avgDailyCarbs: Math.round(totalCarbs / activeDaysCount),
+    avgDailyCarbs,
+    avgCarbs: avgDailyCarbs,
+    totalXE: Number(totalXE.toFixed(1)),
+    avgDailyXE,
+    avgXE: avgDailyXE,
     totalCalories: Math.round(totalCalories),
-    avgDailyCalories: Math.round(totalCalories / activeDaysCount),
-    activeDaysCount: activeDays.size,
+    avgDailyCalories,
+    avgCalories: avgDailyCalories,
     fullDaysCount: insulinStats.fullDaysCount,
   };
 }
 
 /**
- * Русские названия месяцев
+ * Расчет статистики за месяц (или по всем записям, если monthStr не передан).
+ * Делегирует вычисления в calculatePeriodStats для исключения дублирования логики.
  */
-export const RUSSIAN_MONTHS = [
-  'Январь',
-  'Февраль',
-  'Март',
-  'Апрель',
-  'Май',
-  'Июнь',
-  'Июль',
-  'Август',
-  'Сентябрь',
-  'Октябрь',
-  'Ноябрь',
-  'Декабрь',
-];
+export function calculateMonthlyStats(
+  entries: DiaryEntry[],
+  monthStr?: string,
+  settings?: UserSettings
+): MonthlyStats {
+  const monthEntries = monthStr ? entries.filter((e) => e.date.startsWith(monthStr)) : entries;
+  const targetMonth = monthStr || (entries.length > 0 ? entries[0].date.slice(0, 7) : getCurrentMonthString());
+  const periodStats = calculatePeriodStats(monthEntries, settings);
 
-export const RUSSIAN_WEEKDAYS = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
-export const RUSSIAN_WEEKDAYS_FULL = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
-
-export function formatDateRussian(dateStr: string, includeYear: boolean = true): string {
-  if (!dateStr) return '';
-  const [y, m, d] = dateStr.split('-').map(Number);
-  if (!y || !m || !d) return dateStr;
-  const dateObj = new Date(y, m - 1, d);
-  const weekday = RUSSIAN_WEEKDAYS[dateObj.getDay()];
-  const monthName = RUSSIAN_MONTHS[m - 1].toLowerCase();
-  return `${d} ${monthName}${includeYear ? ` ${y}` : ''} (${weekday})`;
+  return {
+    ...periodStats,
+    month: targetMonth,
+  };
 }
 
-export function formatMonthYearRussian(monthStr: string): string {
-  if (!monthStr) return '';
-  const [y, m] = monthStr.split('-').map(Number);
-  if (!y || !m) return monthStr;
-  return `${RUSSIAN_MONTHS[m - 1]} ${y} г.`;
-}
+/**
+ * Единые утилиты работы с датами и временем (реэкспорт для полной обратной совместимости)
+ */
+export * from './dateTime';
 
 /**
  * Регулярное выражение для обнаружения потенциально опасных префиксов формул (Formula Injection / CWE-1236).

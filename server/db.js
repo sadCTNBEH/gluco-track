@@ -3,13 +3,42 @@ import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 
+const defaultDataDir = path.resolve('./data');
 const DATA_DIR = path.resolve(process.env.DATA_DIR || './data');
+
+// Защита от случайного запуска тестов с рабочей/production директорией (REQ-4, REQ-8)
+const isTestRunning =
+  process.env.NODE_ENV === 'test' ||
+  (process.execArgv && process.execArgv.includes('--test')) ||
+  (process.argv && process.argv.some((arg) => arg.includes('.test.') || arg === '--test'));
+
+const isProductionDataDir =
+  !process.env.DATA_DIR ||
+  DATA_DIR === defaultDataDir ||
+  DATA_DIR.startsWith(defaultDataDir + path.sep);
+
+if (isTestRunning && isProductionDataDir) {
+  throw new Error(
+    'КРИТИЧЕСКАЯ ОШИБКА БЕЗОПАСНОСТИ: Запуск тестов с рабочей директорией ./data категорически запрещен! ' +
+    'Укажите изолированный временный DATA_DIR перед запуском тестов.'
+  );
+}
+
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
 const DB_PATH = path.join(DATA_DIR, 'glucotrack.db');
 export const db = new DatabaseSync(DB_PATH);
+
+/**
+ * Безопасное закрытие базы данных для освобождения файловых дескрипторов (для тестов и graceful shutdown)
+ */
+export function closeDb(database = db) {
+  try {
+    database.close();
+  } catch {}
+}
 
 /**
  * Идемпотентная и атомарная миграция таблицы sessions (SEC-04).
@@ -140,8 +169,9 @@ export function migrateEntriesTable(database = db) {
         PRIMARY KEY (user_id, id),
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
       );
-      CREATE INDEX IF NOT EXISTS idx_entries_user_date ON entries(user_id, date);
-      CREATE INDEX IF NOT EXISTS idx_entries_user_id ON entries(user_id);
+      CREATE INDEX IF NOT EXISTS idx_entries_user_date_time ON entries(user_id, date DESC, time ASC);
+      DROP INDEX IF EXISTS idx_entries_user_id;
+      DROP INDEX IF EXISTS idx_entries_user_date;
     `);
     return;
   }
@@ -154,8 +184,9 @@ export function migrateEntriesTable(database = db) {
   // Если оба поля входят в составной первичный ключ (pk > 0 для user_id и id) — таблица уже обновлена (идемпотентность)
   if (userIdCol && userIdCol.pk > 0 && idCol && idCol.pk > 0) {
     database.exec(`
-      CREATE INDEX IF NOT EXISTS idx_entries_user_date ON entries(user_id, date);
-      CREATE INDEX IF NOT EXISTS idx_entries_user_id ON entries(user_id);
+      CREATE INDEX IF NOT EXISTS idx_entries_user_date_time ON entries(user_id, date DESC, time ASC);
+      DROP INDEX IF EXISTS idx_entries_user_id;
+      DROP INDEX IF EXISTS idx_entries_user_date;
     `);
     return;
   }
@@ -196,8 +227,9 @@ export function migrateEntriesTable(database = db) {
     database.exec('ALTER TABLE entries_new RENAME TO entries');
 
     database.exec(`
-      CREATE INDEX IF NOT EXISTS idx_entries_user_date ON entries(user_id, date);
-      CREATE INDEX IF NOT EXISTS idx_entries_user_id ON entries(user_id);
+      CREATE INDEX IF NOT EXISTS idx_entries_user_date_time ON entries(user_id, date DESC, time ASC);
+      DROP INDEX IF EXISTS idx_entries_user_id;
+      DROP INDEX IF EXISTS idx_entries_user_date;
     `);
 
     database.exec('COMMIT');
@@ -248,8 +280,9 @@ db.exec(`
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
 
-  CREATE INDEX IF NOT EXISTS idx_entries_user_date ON entries(user_id, date);
-  CREATE INDEX IF NOT EXISTS idx_entries_user_id ON entries(user_id);
+  CREATE INDEX IF NOT EXISTS idx_entries_user_date_time ON entries(user_id, date DESC, time ASC);
+  DROP INDEX IF EXISTS idx_entries_user_id;
+  DROP INDEX IF EXISTS idx_entries_user_date;
 `);
 
 // Запуск миграций сессий и записей для рабочей базы данных

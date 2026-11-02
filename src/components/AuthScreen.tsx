@@ -55,8 +55,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess, onOpenPolicy 
         const data = await api.login(username.trim(), password);
         onSuccess(data);
       }
-    } catch (err: any) {
-      setError(err?.message || 'Произошла ошибка при авторизации');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Произошла ошибка при авторизации';
+      setError(message);
     } finally {
       setLoading(false);
     }

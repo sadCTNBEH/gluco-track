@@ -3,8 +3,9 @@ import { DiaryEntry, UserSettings } from '../types/diabetes';
 import {
   evaluateGlucose,
   calculateDayAggregates,
-  calculateDailyInsulinAverages,
+  calculatePeriodStats,
   formatDateRussian,
+  getDateDaysAgo,
 } from '../utils/diabetes';
 import {
   Printer,
@@ -12,6 +13,15 @@ import {
   ArrowUp,
   ArrowDown,
 } from 'lucide-react';
+
+export type DoctorReportPeriod = '7d' | '14d' | '30d' | 'all';
+
+const REPORT_PERIOD_OPTIONS: readonly { id: DoctorReportPeriod; label: string }[] = [
+  { id: '7d', label: '7 дней' },
+  { id: '14d', label: '14 дней' },
+  { id: '30d', label: '30 дней' },
+  { id: 'all', label: 'Все' },
+] as const;
 
 interface DoctorReportPdfProps {
   entries: DiaryEntry[];
@@ -24,7 +34,7 @@ export const DoctorReportPdf: React.FC<DoctorReportPdfProps> = ({
   settings,
   onUpdateSettings,
 }) => {
-  const [reportPeriod, setReportPeriod] = useState<'7d' | '14d' | '30d' | 'all'>('all');
+  const [reportPeriod, setReportPeriod] = useState<DoctorReportPeriod>('all');
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
 
   const bolusName = settings.bolusName || 'РинФаст';
@@ -35,9 +45,7 @@ export const DoctorReportPdf: React.FC<DoctorReportPdfProps> = ({
     if (reportPeriod === 'all') return entries;
 
     const daysCount = reportPeriod === '7d' ? 7 : reportPeriod === '14d' ? 14 : 30;
-    const now = new Date();
-    const cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysCount);
-    const cutoffStr = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, '0')}-${String(cutoff.getDate()).padStart(2, '0')}`;
+    const cutoffStr = getDateDaysAgo(daysCount);
 
     return entries.filter((e) => e.date >= cutoffStr);
   }, [entries, reportPeriod]);
@@ -75,71 +83,9 @@ export const DoctorReportPdf: React.FC<DoctorReportPdfProps> = ({
     });
   }, [filteredEntries, sortOrder]);
 
-  // Расчет суммарной статистики за период
+  // Расчет суммарной статистики за период через единый источник calculatePeriodStats
   const stats = useMemo(() => {
-    let glucoseSum = 0;
-    let glucoseCount = 0;
-    let totalRinFast = 0;
-    let totalTresiba = 0;
-    let totalCarbs = 0;
-    let totalCalories = 0;
-    let lowCount = 0;
-    let normalCount = 0;
-    let highCount = 0;
-    let veryHighCount = 0;
-    const daysSet = new Set<string>();
-    const daysMap: Record<string, DiaryEntry[]> = {};
-
-    for (const e of filteredEntries) {
-      daysSet.add(e.date);
-      if (!daysMap[e.date]) daysMap[e.date] = [];
-      daysMap[e.date].push(e);
-
-      if (e.glucose !== null && e.glucose > 0) {
-        glucoseSum += e.glucose;
-        glucoseCount++;
-        const ev = evaluateGlucose(e.glucose, settings);
-        if (ev?.status === 'low') lowCount++;
-        else if (ev?.status === 'normal') normalCount++;
-        else if (ev?.status === 'high') highCount++;
-        else if (ev?.status === 'very_high') veryHighCount++;
-      }
-      if (e.rinFast) totalRinFast += e.rinFast;
-      if (e.tresiba) totalTresiba += e.tresiba;
-      if (e.carbs) totalCarbs += e.carbs;
-      if (e.calories) totalCalories += e.calories;
-    }
-
-    const activeDays = daysSet.size || 1;
-    const avgG = glucoseCount > 0 ? Number((glucoseSum / glucoseCount).toFixed(1)) : null;
-    const hba1c = avgG ? Number(((avgG * 18.05 + 46.7) / 28.7).toFixed(1)) : null;
-
-    // Расчет среднесуточных доз болюса и базала с учетом полных дней (утро, день, вечер)
-    const insulinStats = calculateDailyInsulinAverages(daysMap);
-
-    const tirTotal = glucoseCount || 1;
-    return {
-      activeDays,
-      entriesCount: filteredEntries.length,
-      glucoseCount,
-      avgGlucose: avgG,
-      estimatedHbA1c: hba1c,
-      totalRinFast: Number(totalRinFast.toFixed(1)),
-      avgRinFast: insulinStats.avgDailyRinFast,
-      totalTresiba: Number(totalTresiba.toFixed(1)),
-      avgTresiba: insulinStats.avgDailyTresiba,
-      fullDaysCount: insulinStats.fullDaysCount,
-      totalCarbs: Math.round(totalCarbs),
-      avgCarbs: Math.round(totalCarbs / activeDays),
-      totalCalories: Math.round(totalCalories),
-      avgCalories: Math.round(totalCalories / activeDays),
-      tir: {
-        normalPercent: glucoseCount > 0 ? Math.round((normalCount / tirTotal) * 100) : 0,
-        lowPercent: glucoseCount > 0 ? Math.round((lowCount / tirTotal) * 100) : 0,
-        highPercent: glucoseCount > 0 ? Math.round((highCount / tirTotal) * 100) : 0,
-        veryHighPercent: glucoseCount > 0 ? Math.round((veryHighCount / tirTotal) * 100) : 0,
-      },
-    };
+    return calculatePeriodStats(filteredEntries, settings);
   }, [filteredEntries, settings]);
 
   // Печать / Сохранение в PDF через нативный диалог печати браузера
@@ -194,16 +140,11 @@ export const DoctorReportPdf: React.FC<DoctorReportPdfProps> = ({
 
           {/* Период отчета */}
           <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs border border-slate-200 dark:border-slate-700/60">
-            {[
-              { id: '7d', label: '7 дней' },
-              { id: '14d', label: '14 дней' },
-              { id: '30d', label: '30 дней' },
-              { id: 'all', label: 'Все' },
-            ].map((p) => (
+            {REPORT_PERIOD_OPTIONS.map((p) => (
               <button
                 key={p.id}
                 type="button"
-                onClick={() => setReportPeriod(p.id as any)}
+                onClick={() => setReportPeriod(p.id)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer min-h-[34px] ${
                   reportPeriod === p.id
                     ? 'bg-white dark:bg-slate-900 text-teal-700 dark:text-teal-300 shadow-xs font-bold'
@@ -289,7 +230,9 @@ export const DoctorReportPdf: React.FC<DoctorReportPdfProps> = ({
           </div>
 
           <div>
-            <div className="text-slate-500 text-[10px] font-bold">eHbA1c</div>
+            <div className="text-slate-500 text-[10px] font-bold">
+              {settings.eHbA1c !== null && settings.eHbA1c !== undefined ? 'Лабораторный HbA1c' : 'Расчетный eHbA1c'}
+            </div>
             <div className="text-xl font-black text-blue-800 mt-0.5 font-mono">
               {settings.eHbA1c !== null && settings.eHbA1c !== undefined
                 ? `${settings.eHbA1c}%`

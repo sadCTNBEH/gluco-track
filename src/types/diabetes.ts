@@ -1,5 +1,18 @@
 export type GlucoseStatus = 'low' | 'normal' | 'high' | 'very_high';
 
+export type EntrySyncStatus = 'saved' | 'saving' | 'pending' | 'error';
+
+export type DiaryTag =
+  | 'breakfast'
+  | 'lunch'
+  | 'dinner'
+  | 'snack'
+  | 'bedtime'
+  | 'night'
+  | 'correction'
+  | 'fasting'
+  | 'other';
+
 export interface DiaryEntry {
   id: string;
   date: string; // YYYY-MM-DD
@@ -11,9 +24,20 @@ export interface DiaryEntry {
   tresiba: number | null; // Единицы длинного инсулина Тресиба
   calories: number | null; // ккал
   notes: string; // Еда / нагрузка / комментарий
-  tag?: 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'bedtime' | 'night' | 'correction' | 'fasting' | 'other';
+  tag?: DiaryTag;
   createdAt: number;
+  _syncStatus?: EntrySyncStatus;
+  _syncError?: string;
+  _lastModified?: number;
 }
+
+/**
+ * Черновик медицинской записи для форм добавления и редактирования
+ */
+export type DraftDiaryEntry = Omit<DiaryEntry, 'id' | 'createdAt'> & {
+  id?: string;
+  createdAt?: number;
+};
 
 export interface DaySummary {
   date: string;
@@ -44,10 +68,15 @@ export interface UserSettings {
   doctorNotes?: string;
 }
 
-export interface MonthlyStats {
-  month: string; // YYYY-MM
+export interface PeriodStats {
   totalEntries: number;
+  entriesCount: number; // alias
+  glucoseCount: number;
+  activeDaysCount: number;
+  activeDays: number; // alias
   avgGlucose: number | null;
+  minGlucose: number | null;
+  maxGlucose: number | null;
   estimatedHbA1c: number | null;
   tir: {
     lowCount: number;
@@ -61,12 +90,22 @@ export interface MonthlyStats {
   };
   totalRinFast: number;
   avgDailyRinFast: number;
+  avgRinFast: number; // alias
   totalTresiba: number;
   avgDailyTresiba: number;
+  avgTresiba: number; // alias
   totalCarbs: number;
   avgDailyCarbs: number;
+  avgCarbs: number; // alias
+  totalXE: number;
+  avgDailyXE: number;
+  avgXE: number; // alias
   totalCalories: number;
   avgDailyCalories: number;
-  activeDaysCount: number;
-  fullDaysCount?: number; // количество дней, где заполнены утро, день, вечер и ночь
+  avgCalories: number; // alias
+  fullDaysCount: number;
+}
+
+export interface MonthlyStats extends PeriodStats {
+  month: string; // YYYY-MM
 }

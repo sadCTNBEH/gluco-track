@@ -11,6 +11,9 @@ import {
   getLegacyUnmigratedEntries,
   getLegacyUnmigratedSettings,
   cleanupLegacyStorage,
+  flushUserStorage,
+  clearUserStorageCache,
+  storageStats,
   LEGACY_STORAGE_KEY_ENTRIES,
   LEGACY_STORAGE_KEY_SETTINGS,
 } from './userStorage';
@@ -43,9 +46,13 @@ class MockLocalStorage {
 
 // Устанавливаем мок localStorage в глобальную область видимости
 const mockStorage = new MockLocalStorage();
-(globalThis as any).window = {
-  localStorage: mockStorage,
-};
+Object.defineProperty(globalThis, 'window', {
+  value: {
+    localStorage: mockStorage,
+  },
+  writable: true,
+  configurable: true,
+});
 
 const SAMPLE_ENTRIES_A: DiaryEntry[] = [
   {
@@ -273,4 +280,224 @@ test('SEC-01 Test 6: Безопасная миграция старых запи
   // 2. Старый общий ключ полностью удален, чтобы не срабатывать повторно
   assert.equal(getLegacyUnmigratedEntries().length, 0);
   assert.equal(mockStorage.getItem(LEGACY_STORAGE_KEY_ENTRIES), null);
+});
+
+test('Оптимизация кеширования 1: исключение повторных записей неизменившихся данных', () => {
+  mockStorage.clear();
+  clearUserStorageCache();
+  storageStats.reset();
+
+  const userId = 'usr_opt_1';
+  // Первая запись: должна выполниться
+  setUserCachedEntries(userId, SAMPLE_ENTRIES_A, { immediate: true });
+  assert.equal(storageStats.setItemCalls, 1);
+  assert.equal(storageStats.skippedWrites, 0);
+
+  // Повторная запись того же самого массива ссылок
+  setUserCachedEntries(userId, SAMPLE_ENTRIES_A);
+  assert.equal(storageStats.setItemCalls, 1, 'Повторная запись по той же ссылке не вызывает setItem');
+  assert.equal(storageStats.skippedWrites, 1, 'Зафиксирован пропуск неизменившихся данных');
+
+  // Запись нового массива с идентичными элементами (shallow equal)
+  const clonedIdentical = [...SAMPLE_ENTRIES_A];
+  setUserCachedEntries(userId, clonedIdentical);
+  assert.equal(storageStats.setItemCalls, 1, 'Повторная запись shallow equal не вызывает setItem');
+  assert.equal(storageStats.skippedWrites, 2);
+
+  // Чтение кэша возвращает данные и не парсит JSON повторно, если сырая строка в storage та же
+  const parsed1 = getUserCachedEntries(userId);
+  const parseCallsBefore = storageStats.parseCalls;
+  const parsed2 = getUserCachedEntries(userId);
+  assert.equal(storageStats.parseCalls, parseCallsBefore, 'Повторный вызов getUserCachedEntries не выполняет лишний JSON.parse');
+  assert.equal(parsed1.length, 2);
+  assert.equal(parsed2.length, 2);
+});
+
+test('Оптимизация кеширования 2: быстрое редактирование одной записи (немедленная запись неподтвержденных данных)', () => {
+  mockStorage.clear();
+  clearUserStorageCache();
+  storageStats.reset();
+
+  const userId = 'usr_opt_2';
+  // Базовые записи
+  setUserCachedEntries(userId, SAMPLE_ENTRIES_A, { immediate: true });
+  const writesBefore = storageStats.setItemCalls;
+
+  // Быстрое редактирование: изменение сахара с unconfirmed статусом 'pending'
+  const editedEntry: DiaryEntry = {
+    ...SAMPLE_ENTRIES_A[0],
+    glucose: 8.8,
+    _syncStatus: 'pending',
+  };
+  const updatedList = [editedEntry, SAMPLE_ENTRIES_A[1]];
+
+  // Вызываем setUserCachedEntries БЕЗ флага immediate
+  setUserCachedEntries(userId, updatedList);
+
+  // Из-за наличия неподтвержденной записи ('pending') сохранение ОБЯЗАНО быть немедленным!
+  assert.equal(storageStats.setItemCalls, writesBefore + 1, 'Неподтвержденные изменения сохраняются немедленно');
+
+  // Проверяем прямое наличие в mockStorage до срабатывания каких-либо таймеров
+  const storedJson = mockStorage.getItem(getUserEntriesStorageKey(userId));
+  assert.ok(storedJson, 'Данные немедленно присутствуют в localStorage');
+  assert.ok(storedJson.includes('8.8'), 'Свежее значение сахара сразу записано на диск');
+});
+
+test('Оптимизация кеширования 3: безопасное объединение частых подтвержденных обновлений (debounce)', async () => {
+  mockStorage.clear();
+  clearUserStorageCache();
+  storageStats.reset();
+
+  const userId = 'usr_opt_3';
+  // Первоначальное сохранение
+  setUserCachedEntries(userId, SAMPLE_ENTRIES_A, { immediate: true });
+  const initialWrites = storageStats.setItemCalls;
+
+  // Создаем 5 быстрых последовательных подтвержденных обновлений (например, фоновые сетевые отметки)
+  for (let i = 0; i < 5; i++) {
+    const confirmedList: DiaryEntry[] = [
+      { ...SAMPLE_ENTRIES_A[0], notes: `Заметка подтверждение ${i}`, _syncStatus: 'saved' },
+      SAMPLE_ENTRIES_A[1],
+    ];
+    setUserCachedEntries(userId, confirmedList); // Без immediate
+  }
+
+  // Сразу после цикла: setItem не должен был вызваться 5 раз
+  assert.equal(storageStats.setItemCalls, initialWrites, 'Частые подтвержденные обновления не пишут в storage синхронно');
+
+  // Ждем срабатывания debounce таймера (250 мс)
+  await new Promise((resolve) => setTimeout(resolve, 250));
+
+  // После истечения таймера выполнилась ровно одна объединенная запись
+  assert.equal(storageStats.setItemCalls, initialWrites + 1, 'Выполнена ровно одна объединенная запись');
+  const stored = mockStorage.getItem(getUserEntriesStorageKey(userId));
+  assert.ok(stored?.includes('Заметка подтверждение 4'), 'В хранилище попало самое последнее актуальное состояние');
+});
+
+test('Оптимизация кеширования 4: перезагрузка до завершения debounce (сохранение через flush)', () => {
+  mockStorage.clear();
+  clearUserStorageCache();
+  storageStats.reset();
+
+  const userId = 'usr_opt_4';
+  setUserCachedEntries(userId, SAMPLE_ENTRIES_A, { immediate: true });
+  const initialWrites = storageStats.setItemCalls;
+
+  // Обновление со статусом 'saved' (планируется debounce)
+  const freshList: DiaryEntry[] = [
+    { ...SAMPLE_ENTRIES_A[0], notes: 'Перед перезагрузкой' },
+    SAMPLE_ENTRIES_A[1],
+  ];
+  setUserCachedEntries(userId, freshList);
+  assert.equal(storageStats.setItemCalls, initialWrites, 'Запись ожидает в debounce');
+
+  // Имитируем событие beforeunload / pagehide при закрытии или перезагрузке страницы
+  flushUserStorage(userId);
+
+  // После flush данные гарантированно записаны на диск
+  assert.equal(storageStats.setItemCalls, initialWrites + 1, 'flushUserStorage мгновенно зафиксировал изменения');
+  const stored = mockStorage.getItem(getUserEntriesStorageKey(userId));
+  assert.ok(stored?.includes('Перед перезагрузкой'), 'Данные не потерялись при прерывании debounce');
+});
+
+test('Оптимизация кеширования 5: выход из приложения отменяет отложенные таймеры без утечек', async () => {
+  mockStorage.clear();
+  clearUserStorageCache();
+  storageStats.reset();
+
+  const userId = 'usr_opt_5';
+  setUserCachedEntries(userId, SAMPLE_ENTRIES_A, { immediate: true });
+
+  // Ставим в очередь debounced запись
+  const delayedList: DiaryEntry[] = [
+    { ...SAMPLE_ENTRIES_A[0], notes: 'Не должна появиться после logout' },
+  ];
+  setUserCachedEntries(userId, delayedList);
+
+  // Пользователь нажимает выход
+  clearUserStorage(userId);
+  assert.equal(mockStorage.getItem(getUserEntriesStorageKey(userId)), null, 'Хранилище очищено сразу');
+
+  // Ждем завершения возможного таймера
+  await new Promise((resolve) => setTimeout(resolve, 250));
+
+  // Проверяем, что таймер был отменен и ключ пользователя не возродился в storage
+  assert.equal(mockStorage.getItem(getUserEntriesStorageKey(userId)), null, 'Данные пользователя не воскресли после выхода');
+  assert.equal(getUserCachedEntries(userId).length, 0);
+});
+
+test('Оптимизация кеширования 6: переполнение localStorage (QuotaExceededError) и безопасное усечение кэша', () => {
+  mockStorage.clear();
+  clearUserStorageCache();
+  storageStats.reset();
+
+  const userId = 'usr_opt_6';
+
+  // В старом legacy хранилище лежат временные данные
+  mockStorage.setItem(LEGACY_STORAGE_KEY_ENTRIES, JSON.stringify(SAMPLE_ENTRIES_A));
+
+  // Создаем большой список записей, включая критически важные неподтвержденные (pending)
+  const pendingEntry: DiaryEntry = {
+    ...SAMPLE_ENTRIES_A[0],
+    id: 'crit-pending-1',
+    glucose: 15.2,
+    _syncStatus: 'pending',
+  };
+  const manyEntries: DiaryEntry[] = [pendingEntry];
+  for (let i = 0; i < 100; i++) {
+    manyEntries.push({
+      ...SAMPLE_ENTRIES_A[1],
+      id: `synced-${i}`,
+      notes: `Синхронизированная запись ${i}`,
+      _syncStatus: 'saved',
+    });
+  }
+
+  // Моделируем переполнение квоты при попытке сохранить слишком большой объем
+  const originalSetItem = mockStorage.setItem.bind(mockStorage);
+  let quotaAttempts = 0;
+  mockStorage.setItem = (k: string, v: string) => {
+    // Вызываем QuotaExceededError для первой попытки записи огромного пакета
+    if (v.length > 5000 && quotaAttempts < 1) {
+      quotaAttempts++;
+      const quotaErr = new Error('QuotaExceededError');
+      quotaErr.name = 'QuotaExceededError';
+      (quotaErr as unknown as { code: number }).code = 22;
+      throw quotaErr;
+    }
+    return originalSetItem(k, v);
+  };
+
+  try {
+    setUserCachedEntries(userId, manyEntries, { immediate: true });
+
+    // Проверяем восстановление после QuotaExceededError
+    assert.ok(storageStats.quotaRecoveries > 0, 'Механизм восстановления квоты сработал');
+
+    // Legacy хранилище было очищено для освобождения места
+    assert.equal(mockStorage.getItem(LEGACY_STORAGE_KEY_ENTRIES), null, 'Legacy кэш был очищен для освобождения квоты');
+
+    // Критическая неподтвержденная запись сохранена!
+    const stored = getUserCachedEntries(userId);
+    const hasCritPending = stored.some((e) => e.id === 'crit-pending-1' && e.glucose === 15.2);
+    assert.ok(hasCritPending, 'Критически важная pending-запись сохранена даже при переполнении квоты!');
+  } finally {
+    mockStorage.setItem = originalSetItem;
+  }
+});
+
+test('Оптимизация кеширования 7: исключение повторных записей неизменившихся настроек UserSettings', () => {
+  mockStorage.clear();
+  clearUserStorageCache();
+  storageStats.reset();
+
+  const userId = 'usr_opt_7';
+  setUserCachedSettings(userId, SAMPLE_SETTINGS_A);
+  assert.equal(storageStats.setItemCalls, 1);
+  assert.equal(storageStats.skippedWrites, 0);
+
+  // Повторная запись тех же настроек
+  setUserCachedSettings(userId, { ...SAMPLE_SETTINGS_A });
+  assert.equal(storageStats.setItemCalls, 1, 'Повторная запись настроек с одинаковыми полями не вызывает setItem');
+  assert.equal(storageStats.skippedWrites, 1);
 });

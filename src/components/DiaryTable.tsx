@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { DiaryEntry, UserSettings } from '../types/diabetes';
-import { evaluateGlucose, groupEntriesByDay, formatDateRussian } from '../utils/diabetes';
+import { evaluateGlucose, groupEntriesByDay, formatDateRussian, getTodayDateString, getDateDaysAgo } from '../utils/diabetes';
+import { getDiaryTagConfig } from '../constants/diaryTags';
 import {
   Search,
   Plus,
@@ -13,6 +14,9 @@ import {
   Trash2,
   Activity,
   Filter,
+  CloudOff,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react';
 
 interface DiaryTableProps {
@@ -26,18 +30,22 @@ interface DiaryTableProps {
   settings?: UserSettings;
 }
 
-const TAG_CONFIG: Record<string, { label: string; className: string }> = {
-  fasting: { label: 'Натощак', className: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300' },
-  breakfast: { label: 'Завтрак', className: 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800' },
-  lunch: { label: 'Обед', className: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' },
-  dinner: { label: 'Ужин', className: 'bg-blue-50 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800' },
-  snack: { label: 'Перекус', className: 'bg-teal-50 dark:bg-teal-950/40 text-teal-800 dark:text-teal-300 border border-teal-200 dark:border-teal-800' },
-  bedtime: { label: 'На ночь', className: 'bg-purple-50 dark:bg-purple-950/40 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-800' },
-  correction: { label: 'Коррекция (ДПС)', className: 'bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800' },
-  other: { label: 'Другое', className: 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400' },
-};
+export type DiaryPeriodFilter = 'all' | 'today' | '7d' | '14d' | '30d';
+export type DiaryStatusFilter = 'all' | 'low' | 'normal' | 'high' | 'very_high';
 
-export const DiaryTable: React.FC<DiaryTableProps> = ({
+const PERIOD_FILTER_OPTIONS: readonly { id: DiaryPeriodFilter; label: string }[] = [
+  { id: 'all', label: 'Все' },
+  { id: 'today', label: 'Сегодня' },
+  { id: '7d', label: '7 дней' },
+  { id: '14d', label: '14 дней' },
+  { id: '30d', label: '30 дней' },
+] as const;
+
+function isDiaryStatusFilter(val: string): val is DiaryStatusFilter {
+  return ['all', 'low', 'normal', 'high', 'very_high'].includes(val);
+}
+
+export const DiaryTable: React.FC<DiaryTableProps> = React.memo(({
   entries,
   onAddClick,
   onEditClick,
@@ -48,39 +56,41 @@ export const DiaryTable: React.FC<DiaryTableProps> = ({
   settings,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [periodFilter, setPeriodFilter] = useState<'all' | 'today' | '7d' | '14d' | '30d'>('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'low' | 'normal' | 'high' | 'very_high'>('all');
+  const [periodFilter, setPeriodFilter] = useState<DiaryPeriodFilter>('all');
+  const [statusFilter, setStatusFilter] = useState<DiaryStatusFilter>('all');
 
   // Фильтрация записей
-  const filteredEntries = entries.filter((entry) => {
-    if (searchTerm.trim()) {
-      const q = searchTerm.toLowerCase();
-      const matchNote = entry.notes?.toLowerCase().includes(q);
-      const matchDate = entry.date.includes(q);
-      const matchTime = entry.time.includes(q);
-      if (!matchNote && !matchDate && !matchTime) return false;
-    }
+  const filteredEntries = useMemo(() => {
+    return entries.filter((entry) => {
+      if (searchTerm.trim()) {
+        const q = searchTerm.toLowerCase();
+        const matchNote = entry.notes?.toLowerCase().includes(q);
+        const matchDate = entry.date.includes(q);
+        const matchTime = entry.time.includes(q);
+        if (!matchNote && !matchDate && !matchTime) return false;
+      }
 
-    if (periodFilter !== 'all') {
-      const now = new Date();
-      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-      if (periodFilter === 'today' && entry.date !== todayStr) return false;
+      if (periodFilter !== 'all') {
+        const todayStr = getTodayDateString();
+        if (periodFilter === 'today' && entry.date !== todayStr) return false;
 
-      const daysCount = periodFilter === '7d' ? 7 : periodFilter === '14d' ? 14 : 30;
-      const cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysCount);
-      const cutoffStr = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, '0')}-${String(cutoff.getDate()).padStart(2, '0')}`;
-      if (entry.date < cutoffStr) return false;
-    }
+        const daysCount = periodFilter === '7d' ? 7 : periodFilter === '14d' ? 14 : 30;
+        const cutoffStr = getDateDaysAgo(daysCount);
+        if (entry.date < cutoffStr) return false;
+      }
 
-    if (statusFilter !== 'all') {
-      const evalGl = evaluateGlucose(entry.glucose, settings);
-      if (!evalGl || evalGl.status !== statusFilter) return false;
-    }
+      if (statusFilter !== 'all') {
+        const evalGl = evaluateGlucose(entry.glucose, settings);
+        if (!evalGl || evalGl.status !== statusFilter) return false;
+      }
 
-    return true;
-  });
+      return true;
+    });
+  }, [entries, searchTerm, periodFilter, statusFilter, settings]);
 
-  const groupedDays = groupEntriesByDay(filteredEntries);
+  const groupedDays = useMemo(() => {
+    return groupEntriesByDay(filteredEntries);
+  }, [filteredEntries]);
 
   return (
     <div className="space-y-4">
@@ -113,17 +123,11 @@ export const DiaryTable: React.FC<DiaryTableProps> = ({
         <div className="flex flex-wrap items-center gap-2">
           {/* Period Segmented Filter */}
           <div className="flex items-center p-0.5 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
-            {[
-              { id: 'all', label: 'Все' },
-              { id: 'today', label: 'Сегодня' },
-              { id: '7d', label: '7 дней' },
-              { id: '14d', label: '14 дней' },
-              { id: '30d', label: '30 дней' },
-            ].map((p) => (
+            {PERIOD_FILTER_OPTIONS.map((p) => (
               <button
                 key={p.id}
                 type="button"
-                onClick={() => setPeriodFilter(p.id as any)}
+                onClick={() => setPeriodFilter(p.id)}
                 className={`px-2.5 py-1.5 rounded-lg font-semibold transition-colors cursor-pointer min-h-[32px] ${
                   periodFilter === p.id
                     ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs font-bold'
@@ -139,7 +143,12 @@ export const DiaryTable: React.FC<DiaryTableProps> = ({
           <div className="flex items-center gap-1">
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as any)}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (isDiaryStatusFilter(val)) {
+                  setStatusFilter(val);
+                }
+              }}
               className="h-9 px-2.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-500 cursor-pointer"
             >
               <option value="all">Все статусы</option>
@@ -289,7 +298,7 @@ export const DiaryTable: React.FC<DiaryTableProps> = ({
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
                       {dayEntries.map((entry) => {
                         const evalResult = evaluateGlucose(entry.glucose, settings);
-                        const tagInfo = entry.tag && entry.tag !== 'other' ? TAG_CONFIG[entry.tag] : null;
+                        const tagInfo = getDiaryTagConfig(entry.tag);
 
                         return (
                           <tr
@@ -305,6 +314,30 @@ export const DiaryTable: React.FC<DiaryTableProps> = ({
                                 {tagInfo && (
                                   <span className={`text-[10px] px-1.5 py-0.2 rounded font-sans font-medium w-fit ${tagInfo.className}`}>
                                     {tagInfo.label}
+                                  </span>
+                                )}
+                                {entry._syncStatus === 'saving' && (
+                                  <span className="inline-flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.2 rounded border border-amber-200 dark:border-amber-800 w-fit">
+                                    <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                                    <span>Сохранение...</span>
+                                  </span>
+                                )}
+                                {entry._syncStatus === 'pending' && (
+                                  <span
+                                    className="inline-flex items-center gap-1 text-[10px] text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950/40 px-1.5 py-0.2 rounded border border-sky-200 dark:border-sky-800 w-fit"
+                                    title={entry._syncError || 'Запись сохранена локально. Ожидает отправки на сервер.'}
+                                  >
+                                    <CloudOff className="w-2.5 h-2.5" />
+                                    <span>Офлайн</span>
+                                  </span>
+                                )}
+                                {entry._syncStatus === 'error' && (
+                                  <span
+                                    className="inline-flex items-center gap-1 text-[10px] text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 px-1.5 py-0.2 rounded border border-rose-200 dark:border-rose-800 w-fit"
+                                    title={entry._syncError || 'Ошибка синхронизации'}
+                                  >
+                                    <AlertCircle className="w-2.5 h-2.5" />
+                                    <span>Ошибка</span>
                                   </span>
                                 )}
                               </div>
@@ -440,4 +473,6 @@ export const DiaryTable: React.FC<DiaryTableProps> = ({
 
     </div>
   );
-};
+});
+
+DiaryTable.displayName = 'DiaryTable';

@@ -1,7 +1,9 @@
+import './test_setup.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import cp from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { app, deduplicateUserEntries } from './index.js';
@@ -16,18 +18,15 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-
 
 test('SEC-10: Шрифты подключены локально через WOFF2, внешние запросы к Google Fonts исключены', () => {
   const indexHtmlPath = path.join(ROOT_DIR, 'index.html');
-  const mainTsxPath = path.join(ROOT_DIR, 'src/main.tsx');
   const indexCssPath = path.join(ROOT_DIR, 'src/index.css');
 
   assert.ok(fs.existsSync(indexHtmlPath));
-  assert.ok(fs.existsSync(mainTsxPath));
   assert.ok(fs.existsSync(indexCssPath));
 
   const indexHtml = fs.readFileSync(indexHtmlPath, 'utf-8');
-  const mainTsx = fs.readFileSync(mainTsxPath, 'utf-8');
   const indexCss = fs.readFileSync(indexCssPath, 'utf-8');
 
-  // 1. В index.html отсутствуют любые упоминания fonts.googleapis.com и fonts.gstatic.com
+  // 1. Архитектурная проверка безопасности: в index.html отсутствуют любые упоминания fonts.googleapis.com и fonts.gstatic.com
   assert.doesNotMatch(
     indexHtml,
     /fonts\.googleapis\.com/i,
@@ -39,21 +38,11 @@ test('SEC-10: Шрифты подключены локально через WOFF
     'index.html не должен содержать ссылок на fonts.gstatic.com'
   );
 
-  // 2. В src/main.tsx подключены локальные пакеты @fontsource для Plus Jakarta Sans и JetBrains Mono
-  assert.match(mainTsx, /@fontsource\/plus-jakarta-sans\/400\.css/i);
-  assert.match(mainTsx, /@fontsource\/plus-jakarta-sans\/500\.css/i);
-  assert.match(mainTsx, /@fontsource\/plus-jakarta-sans\/600\.css/i);
-  assert.match(mainTsx, /@fontsource\/plus-jakarta-sans\/700\.css/i);
-  assert.match(mainTsx, /@fontsource\/plus-jakarta-sans\/800\.css/i);
-  assert.match(mainTsx, /@fontsource\/jetbrains-mono\/400\.css/i);
-  assert.match(mainTsx, /@fontsource\/jetbrains-mono\/500\.css/i);
-  assert.match(mainTsx, /@fontsource\/jetbrains-mono\/600\.css/i);
-
-  // 3. В src/index.css объявлены переменные семейств шрифтов
+  // 2. В src/index.css объявлены переменные семейств шрифтов
   assert.match(indexCss, /--font-sans:\s*'Plus Jakarta Sans'/i);
   assert.match(indexCss, /--font-mono:\s*'JetBrains Mono'/i);
 
-  // 4. В собранном бандле (dist/assets) присутствуют локальные WOFF2 файлы
+  // 3. Поведенческая проверка артефактов сборки (dist/assets): локальные WOFF2 файлы
   const distAssetsDir = path.join(ROOT_DIR, 'dist/assets');
   if (fs.existsSync(distAssetsDir)) {
     const files = fs.readdirSync(distAssetsDir);
@@ -67,32 +56,64 @@ test('SEC-10: Шрифты подключены локально через WOFF
       woff2Files.some((f) => f.includes('jetbrains-mono')),
       'В dist/assets должен быть JetBrains Mono woff2'
     );
+
+    // 4. Поведенческая проверка CSS: стили ссылаются исключительно на локальные шрифты без внешних URL
+    const cssFiles = files.filter((f) => f.endsWith('.css'));
+    assert.ok(cssFiles.length > 0, 'В dist/assets должен присутствовать скомпилированный CSS');
+    for (const cssFile of cssFiles) {
+      const cssContent = fs.readFileSync(path.join(distAssetsDir, cssFile), 'utf-8');
+      assert.doesNotMatch(
+        cssContent,
+        /url\(['"]?https?:\/\/[^'")]+\.(?:woff2?|ttf|otf|eot)/i,
+        `CSS ${cssFile} не должен загружать шрифты по внешним HTTP/HTTPS URL`
+      );
+      assert.match(
+        cssContent,
+        /url\(['"]?(?:\/assets|\.\/assets|\.\/|\/)[^'")]+\.woff2/i,
+        `CSS ${cssFile} должен загружать шрифты из локальных assets`
+      );
+    }
   }
 });
 
 test('SEC-11: Криптографически стойкие UUID вместо Math.random() при генерации ID', async () => {
   const appTsxPath = path.join(ROOT_DIR, 'src/App.tsx');
   const excelImportPath = path.join(ROOT_DIR, 'src/utils/excelImport.ts');
+  const useDiaryDataPath = path.join(ROOT_DIR, 'src/hooks/useDiaryData.ts');
 
-  const appTsx = fs.readFileSync(appTsxPath, 'utf-8');
-  const excelImport = fs.readFileSync(excelImportPath, 'utf-8');
+  // Архитектурное ограничение: запрет Math.random() для генерации идентификаторов
+  if (fs.existsSync(appTsxPath)) {
+    assert.doesNotMatch(fs.readFileSync(appTsxPath, 'utf-8'), /Math\.random/i, 'src/App.tsx не должен использовать Math.random()');
+  }
+  if (fs.existsSync(useDiaryDataPath)) {
+    assert.doesNotMatch(fs.readFileSync(useDiaryDataPath, 'utf-8'), /Math\.random/i, 'src/hooks/useDiaryData.ts не должен использовать Math.random()');
+  }
+  if (fs.existsSync(excelImportPath)) {
+    assert.doesNotMatch(fs.readFileSync(excelImportPath, 'utf-8'), /Math\.random/i, 'src/utils/excelImport.ts не должен использовать Math.random()');
+  }
 
-  // В коде создания записей отсутствует Math.random()
-  assert.doesNotMatch(appTsx, /Math\.random/i, 'src/App.tsx не должен использовать Math.random() для генерации ID');
-  assert.match(appTsx, /crypto\.randomUUID\(\)/i, 'src/App.tsx должен использовать crypto.randomUUID()');
+  // Поведенческая проверка 1: парсер Excel/CSV генерирует реальные криптостойкие UUID v4 для записей без ID
+  const { parseExcelDiary } = await import('../src/utils/excelImport.ts');
+  const sampleCsv = `Дата,Время,Глюкоза,Углеводы,ХЕ,Болюс,Базал,Примечания
+2026-11-01,08:00,5.5,20,1.7,3,14,Завтрак
+2026-11-01,13:00,6.0,30,2.5,4,,Обед
+2026-11-01,19:00,7.0,40,3.3,5,,Ужин`;
+  const file = new File([sampleCsv], 'diary.csv', { type: 'text/csv' });
+  const parsed = await parseExcelDiary(file);
+  assert.equal(parsed.entries.length, 3);
+  const generatedIds = new Set();
+  for (const entry of parsed.entries) {
+    assert.ok(entry.id, 'Каждая импортированная запись должна иметь сгенерированный ID');
+    assert.match(
+      entry.id,
+      UUID_REGEX,
+      `Сгенерированный ID (${entry.id}) должен быть валидным UUID v4`
+    );
+    generatedIds.add(entry.id);
+  }
+  assert.equal(generatedIds.size, 3, 'Все сгенерированные идентификаторы должны быть уникальными');
 
-  assert.doesNotMatch(
-    excelImport,
-    /Math\.random/i,
-    'src/utils/excelImport.ts не должен использовать Math.random() для генерации ID'
-  );
-  assert.match(
-    excelImport,
-    /crypto\.randomUUID\(\)/i,
-    'src/utils/excelImport.ts должен использовать crypto.randomUUID()'
-  );
-
-  // Проверка серверной генерации UUID при обращении к API POST /api/entries без ID
+  // Поведенческая проверка 2: серверная генерация UUID при обращении к API POST /api/entries без ID
   const server = app.listen(0);
   const port = server.address().port;
   const baseUrl = `http://127.0.0.1:${port}`;
@@ -210,6 +231,24 @@ test('SEC-12: Составной первичный ключ PRIMARY KEY (user_i
     assert.equal(entryAInDb.notes, 'Запись пользователя A');
     assert.equal(entryBInDb.glucose, 9.0);
     assert.equal(entryBInDb.notes, 'Запись пользователя B с тем же ID');
+
+    // Проверяем реальное ограничение SQLite: попытка вставить запись с дублирующимся (user_id, id)
+    // должна отклоняться SQLite с ошибкой PRIMARY KEY / UNIQUE constraint
+    assert.throws(
+      () => {
+        db.prepare('INSERT INTO entries (id, user_id, date, time, created_at) VALUES (?, ?, ?, ?, ?)').run(
+          sharedEntryId,
+          userA,
+          '2026-11-02',
+          '11:00',
+          Date.now()
+        );
+      },
+      (err) => {
+        return /UNIQUE constraint failed|PRIMARY KEY constraint failed/i.test(err.message);
+      },
+      'Повторная вставка с одинаковым составным первичным ключом (user_id, id) должна отклоняться SQLite'
+    );
 
     // 3. Пользователь A обновляет свою запись -> запись пользователя B НЕ затрагивается
     const updateResA = await fetch(`${baseUrl}/api/entries/${sharedEntryId}`, {
@@ -446,4 +485,322 @@ test('deduplicateUserEntries: находит и безопасно объеди�
   } finally {
     testDb.close();
   }
+});
+
+test('deduplicateUserEntries: безопасная работа внутри открытой транзакции BEGIN (SAVEPOINT без ошибки вложенного BEGIN)', () => {
+  const testDb = new DatabaseSync(':memory:');
+  try {
+    testDb.exec(`
+      CREATE TABLE entries (
+        id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        date TEXT NOT NULL,
+        time TEXT NOT NULL,
+        glucose REAL,
+        carbs REAL,
+        xe REAL,
+        rin_fast REAL,
+        tresiba REAL,
+        calories REAL,
+        notes TEXT,
+        tag TEXT,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (user_id, id)
+      );
+    `);
+
+    const now = Date.now();
+    const userId = 'usr_nested_tx_test';
+
+    // Открываем внешнюю транзакцию
+    testDb.exec('BEGIN');
+
+    testDb.prepare(`
+      INSERT INTO entries (id, user_id, date, time, glucose, carbs, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run('n1', userId, '2026-11-02', '14:00', 6.0, null, now);
+
+    testDb.prepare(`
+      INSERT INTO entries (id, user_id, date, time, glucose, carbs, notes, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run('n2', userId, '2026-11-02', '14:00', 6.0, 30, 'Перекус', now + 10);
+
+    // Вызываем deduplicateUserEntries ВНУТРИ активной транзакции
+    // До исправления это вызывало ошибку: "cannot start a transaction within a transaction"
+    const removed = deduplicateUserEntries(userId, testDb);
+    assert.equal(removed, 1, 'Внутри транзакции должен быть удален ровно 1 дубликат');
+
+    // Фиксируем внешнюю транзакцию
+    testDb.exec('COMMIT');
+
+    const remaining = testDb.prepare('SELECT * FROM entries WHERE user_id = ?').all(userId);
+    assert.equal(remaining.length, 1, 'После COMMIT в БД должна остаться 1 объединенная запись');
+    assert.equal(remaining[0].glucose, 6.0);
+    assert.equal(remaining[0].carbs, 30);
+    assert.equal(remaining[0].notes, 'Перекус');
+  } finally {
+    testDb.close();
+  }
+});
+
+test('deduplicateUserEntries: идемпотентность и изоляция разных пользователей', () => {
+  const testDb = new DatabaseSync(':memory:');
+  try {
+    testDb.exec(`
+      CREATE TABLE entries (
+        id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        date TEXT NOT NULL,
+        time TEXT NOT NULL,
+        glucose REAL,
+        carbs REAL,
+        xe REAL,
+        rin_fast REAL,
+        tresiba REAL,
+        calories REAL,
+        notes TEXT,
+        tag TEXT,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (user_id, id)
+      );
+    `);
+
+    const userA = 'usr_patient_A';
+    const userB = 'usr_patient_B';
+    const now = Date.now();
+
+    // Пользователь A: 2 дубликата на 12:00
+    testDb.prepare('INSERT INTO entries (id, user_id, date, time, glucose, created_at) VALUES (?, ?, ?, ?, ?, ?)').run('a1', userA, '2026-11-02', '12:00', 5.0, now);
+    testDb.prepare('INSERT INTO entries (id, user_id, date, time, glucose, carbs, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run('a2', userA, '2026-11-02', '12:00', 5.0, 40, now + 5);
+
+    // Пользователь B: своя запись на ТО ЖЕ САМОЕ время 12:00
+    testDb.prepare('INSERT INTO entries (id, user_id, date, time, glucose, carbs, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run('b1', userB, '2026-11-02', '12:00', 5.0, 90, now);
+
+    // Дедуплицируем только пользователя A
+    const removedA = deduplicateUserEntries(userA, testDb);
+    assert.equal(removedA, 1, 'Для пользователя A должен быть удален 1 дубликат');
+
+    // Проверяем изоляцию: данные пользователя B не должны измениться
+    const entryB = testDb.prepare('SELECT * FROM entries WHERE user_id = ?').all(userB);
+    assert.equal(entryB.length, 1, 'Запись пользователя B должна остаться нетронутой');
+    assert.equal(entryB[0].carbs, 90, 'Данные пользователя B не должны быть смешаны');
+
+    // Идемпотентность: повторный вызов дедупликации для A возвращает 0 и не удаляет ничего
+    const removedAgain = deduplicateUserEntries(userA, testDb);
+    assert.equal(removedAgain, 0, 'Повторный вызов дедупликации должен возвращать 0');
+    const remainingA = testDb.prepare('SELECT COUNT(*) as cnt FROM entries WHERE user_id = ?').get(userA);
+    assert.equal(remainingA.cnt, 1, 'Количество записей пользователя A должно остаться равным 1');
+  } finally {
+    testDb.close();
+  }
+});
+
+test('POST /api/entries/import: успешный импорт с дубликатами в единой атомарной транзакции (P0)', async () => {
+  const server = app.listen(0);
+  const port = server.address().port;
+  const baseUrl = `http://127.0.0.1:${port}`;
+
+  const testUserId = `usr_import_dedup_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+  const now = Date.now();
+  db.prepare('INSERT INTO users (id, username, password_hash, salt, created_at) VALUES (?, ?, ?, ?, ?)').run(
+    testUserId,
+    `import_dedup_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+    'h',
+    's',
+    now
+  );
+  const { token } = createSession(testUserId, 1);
+
+  try {
+    // Пакет импорта, содержащий 3 записи: 2 из них — дубликаты на 09:00
+    const importPayload = {
+      entries: [
+        {
+          id: 'imp-1',
+          date: '2026-11-02',
+          time: '09:00',
+          glucose: 5.4,
+          carbs: null,
+          notes: '',
+        },
+        {
+          id: 'imp-2',
+          date: '2026-11-02',
+          time: '09:00',
+          glucose: 5.4,
+          carbs: 50,
+          notes: 'Завтрак',
+        },
+        {
+          id: 'imp-3',
+          date: '2026-11-02',
+          time: '14:00',
+          glucose: 6.2,
+          carbs: 60,
+          notes: 'Обед',
+        },
+      ],
+      replaceAll: false,
+    };
+
+    const res = await fetch(`${baseUrl}/api/entries/import`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(importPayload),
+    });
+
+    assert.equal(res.status, 200, 'Импорт с дубликатами должен успешно завершиться со статусом 200 (без падения на вложенном BEGIN)');
+    const body = await res.json();
+    assert.equal(body.ok, true);
+
+    // Проверяем, что в базе для этого пользователя ровно 2 уникальные записи
+    const saved = db.prepare('SELECT * FROM entries WHERE user_id = ? ORDER BY time ASC').all(testUserId);
+    assert.equal(saved.length, 2, 'В БД должно остаться ровно 2 уникальные записи');
+
+    const breakfast = saved.find((e) => e.time === '09:00');
+    assert.ok(breakfast);
+    assert.equal(breakfast.glucose, 5.4);
+    assert.equal(breakfast.carbs, 50, 'Углеводы из дубликата должны быть объединены');
+    assert.equal(breakfast.notes, 'Завтрак');
+  } finally {
+    server.close();
+    db.prepare('DELETE FROM entries WHERE user_id = ?').run(testUserId);
+    db.prepare('DELETE FROM users WHERE id = ?').run(testUserId);
+  }
+});
+
+test('POST /api/entries/import: откат транзакции при ошибке (отсутствие частичного сохранения)', () => {
+  const testDb = new DatabaseSync(':memory:');
+  try {
+    testDb.exec(`
+      CREATE TABLE entries (
+        id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        date TEXT NOT NULL,
+        time TEXT NOT NULL,
+        glucose REAL,
+        carbs REAL,
+        xe REAL,
+        rin_fast REAL,
+        tresiba REAL,
+        calories REAL,
+        notes TEXT,
+        tag TEXT,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (user_id, id)
+      );
+    `);
+
+    const userId = 'usr_rollback_test';
+    const entries = [
+      { id: 'rb-1', date: '2026-11-02', time: '10:00', glucose: 5.0 },
+      { id: 'rb-2', date: '2026-11-02', time: '12:00', glucose: 6.0 },
+    ];
+
+    // Симулируем атомарный блок импорта с возникновением ошибки перед фиксацией
+    assert.throws(() => {
+      testDb.exec('BEGIN');
+      try {
+        for (const e of entries) {
+          testDb.prepare(`
+            INSERT INTO entries (id, user_id, date, time, glucose, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+          `).run(e.id, userId, e.date, e.time, e.glucose, Date.now());
+        }
+        // Симулируем критический сбой
+        throw new Error('Simulated crash during import transaction');
+      } catch (err) {
+        testDb.exec('ROLLBACK');
+        throw err;
+      }
+    }, /Simulated crash/);
+
+    const count = testDb.prepare('SELECT COUNT(*) as cnt FROM entries WHERE user_id = ?').get(userId);
+    assert.equal(count.cnt, 0, 'При ошибке транзакция должна быть полностью откатана, частичные записи отсутствуют');
+  } finally {
+    testDb.close();
+  }
+});
+
+test('GET /api/entries: отсутствие побочных эффектов (read-only семантика, P1)', async () => {
+  const server = app.listen(0);
+  const port = server.address().port;
+  const baseUrl = `http://127.0.0.1:${port}`;
+
+  const testUserId = `usr_readonly_get_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+  const now = Date.now();
+  db.prepare('INSERT INTO users (id, username, password_hash, salt, created_at) VALUES (?, ?, ?, ?, ?)').run(
+    testUserId,
+    `readonly_get_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+    'h',
+    's',
+    now
+  );
+  const { token } = createSession(testUserId, 1);
+
+  // Вставляем 2 записи с одинаковым временем напрямую в БД (дубликаты)
+  db.prepare('INSERT INTO entries (id, user_id, date, time, glucose, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(
+    'dup-1',
+    testUserId,
+    '2026-11-02',
+    '15:00',
+    7.5,
+    now
+  );
+  db.prepare('INSERT INTO entries (id, user_id, date, time, glucose, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(
+    'dup-2',
+    testUserId,
+    '2026-11-02',
+    '15:00',
+    7.5,
+    now + 1
+  );
+
+  try {
+    const countBefore = db.prepare('SELECT COUNT(*) as cnt FROM entries WHERE user_id = ?').get(testUserId);
+    assert.equal(countBefore.cnt, 2, 'До запроса в базе 2 записи');
+
+    // Вызываем GET /api/entries
+    const res = await fetch(`${baseUrl}/api/entries`, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    assert.equal(res.status, 200);
+    const data = await res.json();
+    assert.equal(data.length, 2, 'GET должен вернуть текущее состояние без скрытой модификации');
+
+    // Проверяем БД: количество записей в базе НЕ должно измениться!
+    const countAfter = db.prepare('SELECT COUNT(*) as cnt FROM entries WHERE user_id = ?').get(testUserId);
+    assert.equal(countAfter.cnt, 2, 'GET /api/entries не должен выполнять мутаций и удалений (чистый read-only)');
+  } finally {
+    server.close();
+    db.prepare('DELETE FROM entries WHERE user_id = ?').run(testUserId);
+    db.prepare('DELETE FROM users WHERE id = ?').run(testUserId);
+  }
+});
+
+test('P1 Test Isolation: server/db.js блокирует запуск тестов с рабочей директорией ./data', () => {
+  const result = cp.spawnSync(
+    process.execPath,
+    ['--input-type=module', '-e', "process.env.NODE_ENV = 'test'; process.env.DATA_DIR = './data'; import('./server/db.js');"],
+    { cwd: ROOT_DIR, encoding: 'utf-8' }
+  );
+  assert.notEqual(result.status, 0, 'Запуск с ./data должен завершаться с ненулевым кодом ошибки');
+  assert.match(
+    result.stderr,
+    /КРИТИЧЕСКАЯ ОШИБКА БЕЗОПАСНОСТИ: Запуск тестов с рабочей директорией \.\/data категорически запрещен!/,
+    'Должно выбрасываться исключение о нарушении безопасности'
+  );
+});
+
+test('P1 Test Isolation: тесты используют изолированный DATA_DIR в os.tmpdir() и не трогают ./data', () => {
+  assert.ok(process.env.DATA_DIR, 'process.env.DATA_DIR должен быть определен в тестах');
+  const defaultDataDir = path.resolve(ROOT_DIR, 'data');
+  const currentDataDir = path.resolve(process.env.DATA_DIR);
+  assert.notEqual(currentDataDir, defaultDataDir, 'DATA_DIR тестов не должен указывать на ./data');
+  assert.equal(
+    currentDataDir.startsWith(defaultDataDir),
+    false,
+    'DATA_DIR тестов не должен находиться внутри директории ./data'
+  );
 });

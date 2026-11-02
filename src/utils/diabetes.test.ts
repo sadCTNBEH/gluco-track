@@ -4,6 +4,7 @@ import {
   evaluateGlucose,
   calculateXE,
   calculateDayAggregates,
+  calculatePeriodStats,
   calculateMonthlyStats,
   groupEntriesByDay,
   isFormulaInjection,
@@ -12,6 +13,8 @@ import {
   formatCsvCell,
   exportEntriesToCSV,
   deduplicateEntries,
+  calculateEstimatedHbA1c,
+  isValidDateString,
 } from './diabetes';
 import { DiaryEntry } from '../types/diabetes';
 
@@ -645,3 +648,564 @@ test('deduplicateEntries: объединяет и удаляет полные и
   assert.ok(dinner);
   assert.equal(dinner.glucose, 7.2);
 });
+
+test('P2: calculateEstimatedHbA1c — единая формула ADAG и граничные случаи', () => {
+  // Невалидные / отсутствующие значения
+  assert.equal(calculateEstimatedHbA1c(null), null);
+  assert.equal(calculateEstimatedHbA1c(undefined), null);
+  assert.equal(calculateEstimatedHbA1c(0), null);
+  assert.equal(calculateEstimatedHbA1c(-5), null);
+  assert.equal(calculateEstimatedHbA1c(NaN), null);
+  assert.equal(calculateEstimatedHbA1c(Infinity), null);
+
+  // Стандартные клинические значения ADAG: ((avgG * 18.05 + 46.7) / 28.7)
+  // 5.5 ммоль/л -> (5.5 * 18.05 + 46.7) / 28.7 = 145.975 / 28.7 = 5.086 -> 5.1%
+  assert.equal(calculateEstimatedHbA1c(5.5), 5.1);
+
+  // 7.0 ммоль/л -> (7.0 * 18.05 + 46.7) / 28.7 = 173.05 / 28.7 = 6.029 -> 6.0%
+  assert.equal(calculateEstimatedHbA1c(7.0), 6.0);
+
+  // 10.0 ммоль/л -> (10.0 * 18.05 + 46.7) / 28.7 = 227.2 / 28.7 = 7.916 -> 7.9%
+  assert.equal(calculateEstimatedHbA1c(10.0), 7.9);
+
+  // Проверка совпадения со stats.estimatedHbA1c из calculateMonthlyStats
+  const dummyEntries: DiaryEntry[] = [
+    { id: '1', date: '2026-11-01', time: '08:00', glucose: 7.0, carbs: null, xe: null, rinFast: null, tresiba: null, calories: null, notes: '', createdAt: 100 },
+  ];
+  const stats = calculateMonthlyStats(dummyEntries);
+  assert.equal(stats.estimatedHbA1c, calculateEstimatedHbA1c(7.0));
+  assert.equal(stats.estimatedHbA1c, 6.0);
+});
+
+test('P2: isValidDateString — строгая проверка календарных дат', () => {
+  assert.equal(isValidDateString('2026-11-02'), true);
+  assert.equal(isValidDateString('2024-02-29'), true, '2024 високосный');
+  assert.equal(isValidDateString('2026-02-28'), true);
+
+  // Несуществующие даты
+  assert.equal(isValidDateString('2026-02-29'), false, '2026 невисокосный');
+  assert.equal(isValidDateString('2026-02-31'), false, '31 февраля');
+  assert.equal(isValidDateString('2026-04-31'), false, '31 апреля');
+  assert.equal(isValidDateString('2026-11-31'), false, '31 ноября');
+  assert.equal(isValidDateString('2026-13-01'), false, '13-й месяц');
+  assert.equal(isValidDateString('invalid'), false);
+  assert.equal(isValidDateString(''), false);
+  assert.equal(isValidDateString(null), false);
+  assert.equal(isValidDateString(undefined), false);
+});
+
+test('P2: parseExcelDiary — безопасный импорт, отказ от слепого fallback и проверка границ', async () => {
+  const { parseExcelDiary } = await import('./excelImport.ts');
+
+  // 1. Попытка импортировать произвольный CSV без заголовков диабета (например финансовую накладную)
+  const arbitraryCsv = `Товар,Количество,Цена,Сумма
+Хлеб нарезной,2,45,90
+Молоко 3.2%,1,80,80
+Яблоки сезонные,3,120,360`;
+
+  const arbitraryFile = new File([arbitraryCsv], 'invoice.csv', { type: 'text/csv' });
+  const arbitraryResult = await parseExcelDiary(arbitraryFile);
+
+  assert.equal(arbitraryResult.entries.length, 0, 'Нераспознанный формат не должен создавать записей');
+  assert.ok(arbitraryResult.errors.length > 0, 'Должна возвращаться понятная ошибка формата');
+  assert.ok(arbitraryResult.errors[0].includes('Не удалось распознать формат файла'));
+
+  // 2. CSV с недопустимыми/отрицательными значениями и некорректными календарными датами
+  const invalidMetricsCsv = `Дата,Время,Глюкоза (ммоль/л),Углеводы (г),ХЕ,РинФаст (ЕД),Тресиба (ЕД),Заметки
+2026-02-31,08:00,5.5,30,2.5,4,,Запись с несуществующей датой (31 февраля)
+2026-11-02,09:00,-5.0,-20,-1,-4,-10,Запись с отрицательными значениями
+2026-11-02,12:00,999.0,5000,200,500,500,Запись с абсурдными выбросами
+2026-11-02,18:00,6.2,48,4.0,5,14,Корректная запись дневника`;
+
+  const invalidMetricsFile = new File([invalidMetricsCsv], 'test_bounds.csv', { type: 'text/csv' });
+  const boundsResult = await parseExcelDiary(invalidMetricsFile);
+
+  // 2026-02-31 пропущена из-за невалидной даты.
+  // Строка с отрицательными значениями: все числовые поля становятся null, но есть заметка -> попадает как запись с валидной датой и заметкой, но с null в глюкозе/инсулине/углеводах!
+  // Строка с выбросами 999: отсекается до null.
+  // Корректная запись импортируется полностью.
+  const validEntry = boundsResult.entries.find((e) => e.time === '18:00');
+  assert.ok(validEntry, 'Корректная запись должна успешно сохраниться');
+  assert.equal(validEntry.glucose, 6.2);
+  assert.equal(validEntry.carbs, 48);
+  assert.equal(validEntry.xe, 4.0);
+  assert.equal(validEntry.rinFast, 5);
+  assert.equal(validEntry.tresiba, 14);
+
+  // Проверяем строку с отрицательными числами
+  const negativeEntry = boundsResult.entries.find((e) => e.time === '09:00');
+  assert.ok(negativeEntry);
+  assert.equal(negativeEntry.glucose, null, 'Отрицательная глюкоза должна быть отброшена');
+  assert.equal(negativeEntry.carbs, null, 'Отрицательные углеводы должны быть отброшены');
+  assert.equal(negativeEntry.rinFast, null, 'Отрицательный инсулин должен быть отброшен');
+  assert.equal(negativeEntry.tresiba, null, 'Отрицательный базал должен быть отброшен');
+
+  // Проверяем строку с 999
+  const outlierEntry = boundsResult.entries.find((e) => e.time === '12:00');
+  assert.ok(outlierEntry);
+  assert.equal(outlierEntry.glucose, null, 'Глюкоза 999 должна быть отброшена как вне физиологических границ');
+
+  // Запись с датой 2026-02-31 не должна быть импортирована вовсе
+  const feb31Entry = boundsResult.entries.find((e) => e.date === '2026-02-31');
+  assert.equal(feb31Entry, undefined, 'Запись с 31 февраля не должна существовать');
+
+  // 3. Строгий импорт дневника БЕЗ заголовков (соответствующего известной схеме: дата, время, глюкоза...)
+  const headerlessValidCsv = `2026-11-02,08:30,5.4,Норма,36,3.0,4,,Завтрак
+2026-11-02,13:00,6.8,Норма,48,4.0,5,,Обед
+2026-11-02,19:00,8.2,Норма,24,2.0,3,14,Ужин`;
+
+  const headerlessFile = new File([headerlessValidCsv], 'headerless.csv', { type: 'text/csv' });
+  const headerlessResult = await parseExcelDiary(headerlessFile);
+
+  assert.equal(headerlessResult.entries.length, 3, 'Строгий формат без заголовков должен успешно распознаваться');
+  assert.equal(headerlessResult.entries[0].date, '2026-11-02');
+  assert.equal(headerlessResult.entries[0].time, '08:30');
+  assert.equal(headerlessResult.entries[0].glucose, 5.4);
+  assert.equal(headerlessResult.entries[0].rinFast, 4);
+});
+
+test('JS Loading Optimization: dynamic import and module caching for Excel libraries', async () => {
+  const { getReadXlsxFile, parseExcelDiary } = await import('./excelImport.ts');
+  const { getWriteXlsxFile, exportEntriesToXLSX } = await import('./excelExport.ts');
+
+  // 1. Проверяем getReadXlsxFile: возвращает функцию и возвращает тот же закэшированный промис
+  const readFn1 = await getReadXlsxFile();
+  const readFn2 = await getReadXlsxFile();
+  assert.equal(typeof readFn1, 'function', 'getReadXlsxFile должен разрешаться в функцию');
+  assert.strictEqual(readFn1, readFn2, 'getReadXlsxFile должен использовать закэшированный модуль без повторной загрузки');
+
+  // 2. Проверяем getWriteXlsxFile: возвращает функцию и закэшированный результат
+  const writeFn1 = await getWriteXlsxFile();
+  const writeFn2 = await getWriteXlsxFile();
+  assert.equal(typeof writeFn1, 'function', 'getWriteXlsxFile должен разрешаться в функцию');
+  assert.strictEqual(writeFn1, writeFn2, 'getWriteXlsxFile должен использовать закэшированный модуль без повторной загрузки');
+
+  // 3. Проверяем парсинг CSV: не вызывает getReadXlsxFile (работает автономно)
+  const csvFile = new File(['Дата,Время,Глюкоза\n2026-11-02,09:00,5.6'], 'test.csv', { type: 'text/csv' });
+  const csvResult = await parseExcelDiary(csvFile);
+  assert.equal(csvResult.entries.length, 1);
+  assert.equal(csvResult.entries[0].glucose, 5.6);
+
+  // 4. Проверяем exportEntriesToXLSX с защитой от Formula Injection (SEC-03)
+  const g = globalThis as { document?: unknown; URL?: unknown };
+  const originalDoc = g.document;
+  const originalURL = g.URL;
+  try {
+    let capturedBlob: Blob | null = null;
+    g.document = {
+      createElement: () => ({
+        click: () => {},
+        setAttribute: () => {},
+        style: {},
+      }),
+      body: {
+        appendChild: () => {},
+        removeChild: () => {},
+      },
+    };
+    g.URL = {
+      createObjectURL: (blob: unknown) => {
+        if (blob instanceof Blob) {
+          capturedBlob = blob;
+        }
+        return 'blob:mock-url';
+      },
+      revokeObjectURL: () => {},
+    };
+
+    await exportEntriesToXLSX([
+      {
+        id: '1',
+        date: '2026-11-02',
+        time: '12:00',
+        glucose: 6.2,
+        carbs: null,
+        xe: null,
+        rinFast: null,
+        tresiba: null,
+        calories: null,
+        notes: '=cmd|"/C calc"!A0', // Попытка инъекции формулы
+        createdAt: Date.now(),
+      },
+    ]);
+
+    assert.ok(capturedBlob, 'XLSX экспорт должен успешно сгенерировать Blob');
+    // Даём write-excel-file завершить внутренний 100ms таймаут очистки DOM
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  } finally {
+    g.document = originalDoc;
+    g.URL = originalURL;
+  }
+});
+
+test('JS Loading Optimization: отсутствие статических импортов тяжёлых библиотек в критическом пути', async () => {
+  const fs = await import('fs');
+  const path = await import('path');
+
+  // Проверяем excelImport.ts: нет статического import readXlsxFile from 'read-excel-file...'
+  const importCode = fs.readFileSync(path.resolve('src/utils/excelImport.ts'), 'utf-8');
+  assert.ok(
+    !/^import\s+readXlsxFile\s+from/m.test(importCode),
+    'excelImport.ts не должен содержать статический импорт readXlsxFile'
+  );
+  assert.ok(
+    importCode.includes("import('read-excel-file/browser')"),
+    'excelImport.ts должен использовать динамический import()'
+  );
+
+  // Проверяем excelExport.ts: нет статического import writeXlsxFile from 'write-excel-file...'
+  const exportCode = fs.readFileSync(path.resolve('src/utils/excelExport.ts'), 'utf-8');
+  assert.ok(
+    !/^import\s+writeXlsxFile\s+from/m.test(exportCode),
+    'excelExport.ts не должен содержать статический импорт writeXlsxFile'
+  );
+  assert.ok(
+    exportCode.includes("import('write-excel-file/browser')"),
+    'excelExport.ts должен использовать динамический import()'
+  );
+
+  // Проверяем DataManagementSection.tsx: нет статического импорта exportEntriesToXLSX
+  const dataMgmtCode = fs.readFileSync(
+    path.resolve('src/components/settings/DataManagementSection.tsx'),
+    'utf-8'
+  );
+  assert.ok(
+    !/^import\s+.*exportEntriesToXLSX.*from/m.test(dataMgmtCode),
+    'DataManagementSection.tsx не должен статически импортировать exportEntriesToXLSX'
+  );
+
+  // Проверяем ExcelImportModal.tsx: нет статического импорта parseExcelDiary
+  const modalCode = fs.readFileSync(path.resolve('src/components/ExcelImportModal.tsx'), 'utf-8');
+  assert.ok(
+    !/^import\s+.*parseExcelDiary.*from/m.test(modalCode),
+    'ExcelImportModal.tsx не должен статически импортировать parseExcelDiary'
+  );
+
+  // Проверяем App.tsx: использует React.lazy для модальных окон
+  const appCode = fs.readFileSync(path.resolve('src/App.tsx'), 'utf-8');
+  assert.ok(appCode.includes('React.lazy'), 'App.tsx должен использовать React.lazy для ленивой загрузки');
+  assert.ok(
+    !/^import\s+.*SettingsModal.*from\s+['"]\.\/components\/SettingsModal['"]/m.test(appCode),
+    'App.tsx не должен статически импортировать SettingsModal'
+  );
+  assert.ok(
+    !/^import\s+.*ExcelImportModal.*from\s+['"]\.\/components\/ExcelImportModal['"]/m.test(appCode),
+    'App.tsx не должен статически импортировать ExcelImportModal'
+  );
+});
+
+test('TypeScript Refactoring: runtime type guards and safe unknown error handling', async () => {
+  const { isDiaryTag, getDiaryTagConfig, getDiaryTagLabel } = await import('../constants/diaryTags');
+  const { isTheme } = await import('./theme');
+  const { isClientError, isConflictError } = await import('./diarySync');
+  const { ApiError, sanitizeEntryForServer } = await import('../api/client');
+
+  // 1. isDiaryTag type guard
+  assert.equal(isDiaryTag('breakfast'), true);
+  assert.equal(isDiaryTag('lunch'), true);
+  assert.equal(isDiaryTag('other'), true);
+  assert.equal(isDiaryTag('invalid_tag'), false);
+  assert.equal(isDiaryTag(''), false);
+
+  // 2. getDiaryTagConfig и getDiaryTagLabel с неизвестными значениями
+  assert.equal(getDiaryTagConfig(null), null);
+  assert.equal(getDiaryTagConfig('other'), null);
+  assert.equal(getDiaryTagConfig('unknown_val'), null);
+  assert.equal(getDiaryTagLabel(null), '');
+  assert.equal(getDiaryTagLabel('breakfast'), 'Завтрак');
+  assert.equal(getDiaryTagLabel('custom_label'), 'custom_label');
+
+  // 3. isTheme type guard
+  assert.equal(isTheme('light'), true);
+  assert.equal(isTheme('dark'), true);
+  assert.equal(isTheme('system'), true);
+  assert.equal(isTheme('blue'), false);
+  assert.equal(isTheme(null), false);
+  assert.equal(isTheme(123), false);
+
+  // 4. isClientError и isConflictError с различными типами unknown ошибок
+  assert.equal(isClientError(new ApiError('Bad request', 400)), true);
+  assert.equal(isClientError(new ApiError('Conflict', 409)), false);
+  assert.equal(isClientError(new ApiError('Server error', 500)), false);
+  assert.equal(isClientError({ status: 422 }), true);
+  assert.equal(isClientError({ status: 409 }), false);
+  assert.equal(isClientError(null), false);
+  assert.equal(isClientError('random string error'), false);
+  assert.equal(isClientError(new Error('Generic error')), false);
+
+  assert.equal(isConflictError(new ApiError('Conflict', 409)), true);
+  assert.equal(isConflictError({ status: 409 }), true);
+  assert.equal(isConflictError(new ApiError('Not found', 404)), false);
+  assert.equal(isConflictError(null), false);
+  assert.equal(isConflictError(undefined), false);
+
+  // 5. sanitizeEntryForServer типизация и удаление метаданных
+  const fullEntry = {
+    id: 'test-123',
+    date: '2026-11-02',
+    time: '12:00',
+    glucose: 5.5,
+    carbs: 24,
+    xe: 2.0,
+    rinFast: 3,
+    tresiba: null,
+    calories: 180,
+    notes: 'Тест',
+    createdAt: 123456789,
+    _syncStatus: 'saved' as const,
+    _syncError: 'Old error',
+    _lastModified: 987654321,
+  };
+  const sanitized = sanitizeEntryForServer(fullEntry);
+  assert.equal(sanitized.id, 'test-123');
+  assert.equal('_syncStatus' in sanitized, false);
+  assert.equal('_syncError' in sanitized, false);
+  assert.equal('_lastModified' in sanitized, false);
+  // Проверяем, что исходный объект не был мутирован
+  assert.equal(fullEntry._syncStatus, 'saved');
+});
+
+test('Refactoring Medical Stats: единый источник расчетов для PDF, графиков и дневника (calculatePeriodStats vs calculateMonthlyStats)', () => {
+  const entries: DiaryEntry[] = [
+    {
+      id: 'e1',
+      date: '2026-11-01',
+      time: '08:00',
+      glucose: 3.8, // low
+      carbs: 20,
+      xe: 1.7,
+      rinFast: 3,
+      tresiba: 14,
+      calories: 180,
+      notes: 'Завтрак',
+      tag: 'breakfast',
+      createdAt: 1,
+    },
+    {
+      id: 'e2',
+      date: '2026-11-01',
+      time: '13:00',
+      glucose: 6.5, // normal
+      carbs: 36,
+      xe: 3.0,
+      rinFast: 5,
+      tresiba: null,
+      calories: 350,
+      notes: 'Обед',
+      tag: 'lunch',
+      createdAt: 2,
+    },
+    {
+      id: 'e3',
+      date: '2026-11-01',
+      time: '19:00',
+      glucose: 7.2, // normal
+      carbs: 24,
+      xe: 2.0,
+      rinFast: 4,
+      tresiba: null,
+      calories: 250,
+      notes: 'Ужин',
+      tag: 'dinner',
+      createdAt: 3,
+    },
+    {
+      id: 'e4',
+      date: '2026-11-02',
+      time: '08:00',
+      glucose: 11.0, // high
+      carbs: 30,
+      xe: 2.5,
+      rinFast: 6,
+      tresiba: 14,
+      calories: 280,
+      notes: 'Завтрак',
+      tag: 'breakfast',
+      createdAt: 4,
+    },
+    {
+      id: 'e5',
+      date: '2026-11-02',
+      time: '14:00',
+      glucose: 15.5, // very high
+      carbs: 48,
+      xe: 4.0,
+      rinFast: 8,
+      tresiba: null,
+      calories: 450,
+      notes: 'Обед',
+      tag: 'lunch',
+      createdAt: 5,
+    },
+  ];
+
+  // Расчет через calculatePeriodStats (как в DoctorReportPdf и TelemetryBar)
+  const periodStats = calculatePeriodStats(entries);
+
+  // Расчет через calculateMonthlyStats (как в MonthlyCharts)
+  const monthlyStats = calculateMonthlyStats(entries, '2026-11');
+
+  // Совпадение ключевых медицинских метрик
+  assert.equal(periodStats.totalEntries, monthlyStats.totalEntries);
+  assert.equal(periodStats.glucoseCount, monthlyStats.glucoseCount);
+  assert.equal(periodStats.avgGlucose, monthlyStats.avgGlucose);
+  assert.equal(periodStats.estimatedHbA1c, monthlyStats.estimatedHbA1c);
+  assert.deepEqual(periodStats.tir, monthlyStats.tir);
+  assert.equal(periodStats.totalRinFast, monthlyStats.totalRinFast);
+  assert.equal(periodStats.avgDailyRinFast, monthlyStats.avgDailyRinFast);
+  assert.equal(periodStats.totalTresiba, monthlyStats.totalTresiba);
+  assert.equal(periodStats.avgDailyTresiba, monthlyStats.avgDailyTresiba);
+  assert.equal(periodStats.totalCarbs, monthlyStats.totalCarbs);
+  assert.equal(periodStats.avgDailyCarbs, monthlyStats.avgDailyCarbs);
+  assert.equal(periodStats.totalCalories, monthlyStats.totalCalories);
+  assert.equal(periodStats.avgDailyCalories, monthlyStats.avgDailyCalories);
+  assert.equal(periodStats.activeDaysCount, monthlyStats.activeDaysCount);
+  assert.equal(periodStats.fullDaysCount, monthlyStats.fullDaysCount);
+
+  // Проверка алиасов для совместимости с DoctorReportPdf
+  assert.equal(periodStats.entriesCount, periodStats.totalEntries);
+  assert.equal(periodStats.activeDays, periodStats.activeDaysCount);
+  assert.equal(periodStats.avgRinFast, periodStats.avgDailyRinFast);
+  assert.equal(periodStats.avgTresiba, periodStats.avgDailyTresiba);
+  assert.equal(periodStats.avgCarbs, periodStats.avgDailyCarbs);
+  assert.equal(periodStats.avgCalories, periodStats.avgDailyCalories);
+
+  // Проверка точных расчетов
+  // 5 замеров: 3.8 + 6.5 + 7.2 + 11.0 + 15.5 = 44.0 / 5 = 8.8 ммоль/л
+  assert.equal(periodStats.avgGlucose, 8.8);
+  assert.equal(periodStats.minGlucose, 3.8);
+  assert.equal(periodStats.maxGlucose, 15.5);
+
+  // TIR: low: 1 (20%), normal: 2 (40%), high: 1 (20%), veryHigh: 1 (20%)
+  assert.equal(periodStats.tir.lowPercent, 20);
+  assert.equal(periodStats.tir.normalPercent, 40);
+  assert.equal(periodStats.tir.highPercent, 20);
+  assert.equal(periodStats.tir.veryHighPercent, 20);
+
+  // eHbA1c: (8.8 * 18.05 + 46.7) / 28.7 = (158.84 + 46.7) / 28.7 = 205.54 / 28.7 = 7.1616... -> 7.2
+  assert.equal(periodStats.estimatedHbA1c, 7.2);
+});
+
+test('Refactoring Medical Stats: произвольные диапазоны дат (7d, 14d, custom range)', () => {
+  const entries: DiaryEntry[] = [
+    { id: '1', date: '2026-10-20', time: '10:00', glucose: 5.0, carbs: 12, xe: 1, rinFast: 2, tresiba: 10, calories: 100, notes: '', createdAt: 1 },
+    { id: '2', date: '2026-10-31', time: '10:00', glucose: 6.0, carbs: 24, xe: 2, rinFast: 4, tresiba: 10, calories: 200, notes: '', createdAt: 2 },
+    { id: '3', date: '2026-11-01', time: '10:00', glucose: 7.0, carbs: 36, xe: 3, rinFast: 6, tresiba: 10, calories: 300, notes: '', createdAt: 3 },
+    { id: '4', date: '2026-11-02', time: '10:00', glucose: 8.0, carbs: 48, xe: 4, rinFast: 8, tresiba: 10, calories: 400, notes: '', createdAt: 4 },
+  ];
+
+  // Фильтр за 2 дня (2026-11-01 .. 2026-11-02)
+  const last2Days = entries.filter((e) => e.date >= '2026-11-01');
+  const stats2d = calculatePeriodStats(last2Days);
+  assert.equal(stats2d.totalEntries, 2);
+  assert.equal(stats2d.activeDaysCount, 2);
+  assert.equal(stats2d.avgGlucose, 7.5);
+  assert.equal(stats2d.minGlucose, 7.0);
+  assert.equal(stats2d.maxGlucose, 8.0);
+  assert.equal(stats2d.totalCarbs, 84); // 36 + 48
+  assert.equal(stats2d.avgDailyCarbs, 42); // 84 / 2
+
+  // Фильтр за 3 дня (2026-10-31 .. 2026-11-02)
+  const last3Days = entries.filter((e) => e.date >= '2026-10-31');
+  const stats3d = calculatePeriodStats(last3Days);
+  assert.equal(stats3d.totalEntries, 3);
+  assert.equal(stats3d.activeDaysCount, 3);
+  assert.equal(stats3d.avgGlucose, 7.0); // (6 + 7 + 8) / 3
+  assert.equal(stats3d.minGlucose, 6.0);
+  assert.equal(stats3d.maxGlucose, 8.0);
+});
+
+test('Refactoring Medical Stats: пустые дневники и неполные записи (защита от деления на 0 и NaN)', () => {
+  // 1. Пустой дневник
+  const emptyStats = calculatePeriodStats([]);
+  assert.equal(emptyStats.totalEntries, 0);
+  assert.equal(emptyStats.glucoseCount, 0);
+  assert.equal(emptyStats.activeDaysCount, 0);
+  assert.equal(emptyStats.avgGlucose, null);
+  assert.equal(emptyStats.minGlucose, null);
+  assert.equal(emptyStats.maxGlucose, null);
+  assert.equal(emptyStats.estimatedHbA1c, null);
+  assert.equal(emptyStats.tir.normalPercent, 0);
+  assert.equal(emptyStats.tir.lowPercent, 0);
+  assert.equal(emptyStats.tir.highPercent, 0);
+  assert.equal(emptyStats.tir.veryHighPercent, 0);
+  assert.equal(emptyStats.totalRinFast, 0);
+  assert.equal(emptyStats.avgDailyRinFast, 0);
+  assert.equal(emptyStats.totalTresiba, 0);
+  assert.equal(emptyStats.avgDailyTresiba, 0);
+  assert.equal(emptyStats.totalCarbs, 0);
+  assert.equal(emptyStats.avgDailyCarbs, 0);
+  assert.equal(emptyStats.totalXE, 0);
+  assert.equal(emptyStats.avgDailyXE, 0);
+  assert.equal(emptyStats.totalCalories, 0);
+  assert.equal(emptyStats.avgDailyCalories, 0);
+
+  // 2. Записи без глюкозы (только укол или перекус)
+  const nonGlucoseEntries: DiaryEntry[] = [
+    { id: '1', date: '2026-11-02', time: '12:00', glucose: null, carbs: 50, xe: 4.2, rinFast: 5, tresiba: null, calories: 300, notes: '', createdAt: 1 },
+    { id: '2', date: '2026-11-02', time: '22:00', glucose: 0, carbs: 0, xe: 0, rinFast: null, tresiba: 14, calories: 0, notes: '', createdAt: 2 },
+  ];
+  const statsNonGlucose = calculatePeriodStats(nonGlucoseEntries);
+  assert.equal(statsNonGlucose.totalEntries, 2);
+  assert.equal(statsNonGlucose.glucoseCount, 0);
+  assert.equal(statsNonGlucose.avgGlucose, null);
+  assert.equal(statsNonGlucose.minGlucose, null);
+  assert.equal(statsNonGlucose.maxGlucose, null);
+  assert.equal(statsNonGlucose.estimatedHbA1c, null);
+  assert.equal(statsNonGlucose.tir.normalPercent, 0);
+  assert.equal(statsNonGlucose.totalRinFast, 5);
+  assert.equal(statsNonGlucose.totalTresiba, 14);
+  assert.equal(statsNonGlucose.totalCarbs, 50);
+  assert.equal(statsNonGlucose.totalXE, 4.2);
+});
+
+test('Refactoring Medical Stats: граничные значения глюкозы и кастомные диапазоны', () => {
+  const customSettings = {
+    patientName: 'Тест',
+    diabetesType: '1' as const,
+    xeRatio: 10,
+    targetLow: 4.0,
+    targetHigh: 8.0,
+    hypoThreshold: 3.5,
+    severeHyperThreshold: 12.0,
+  };
+
+  const boundaryEntries: DiaryEntry[] = [
+    { id: '1', date: '2026-11-01', time: '08:00', glucose: 3.5, carbs: null, xe: null, rinFast: null, tresiba: null, calories: null, notes: '', createdAt: 1 }, // ровно hypoThreshold => low
+    { id: '2', date: '2026-11-01', time: '10:00', glucose: 4.0, carbs: null, xe: null, rinFast: null, tresiba: null, calories: null, notes: '', createdAt: 2 }, // ровно targetLow => normal
+    { id: '3', date: '2026-11-01', time: '12:00', glucose: 8.0, carbs: null, xe: null, rinFast: null, tresiba: null, calories: null, notes: '', createdAt: 3 }, // ровно targetHigh => normal
+    { id: '4', date: '2026-11-01', time: '14:00', glucose: 8.1, carbs: null, xe: null, rinFast: null, tresiba: null, calories: null, notes: '', createdAt: 4 }, // чуть выше targetHigh => high
+    { id: '5', date: '2026-11-01', time: '16:00', glucose: 12.0, carbs: null, xe: null, rinFast: null, tresiba: null, calories: null, notes: '', createdAt: 5 }, // ровно severeHyper => high
+    { id: '6', date: '2026-11-01', time: '18:00', glucose: 12.1, carbs: null, xe: null, rinFast: null, tresiba: null, calories: null, notes: '', createdAt: 6 }, // выше severeHyper => very_high
+  ];
+
+  const stats = calculatePeriodStats(boundaryEntries, customSettings);
+  assert.equal(stats.glucoseCount, 6);
+  assert.equal(stats.minGlucose, 3.5);
+  assert.equal(stats.maxGlucose, 12.1);
+  assert.equal(stats.tir.lowCount, 1);
+  assert.equal(stats.tir.normalCount, 2);
+  assert.equal(stats.tir.highCount, 2);
+  assert.equal(stats.tir.veryHighCount, 1);
+});
+
+test('Refactoring Medical Stats: отсутствие двойного подсчета записей и доз', () => {
+  const entriesSameDay: DiaryEntry[] = [
+    { id: '1', date: '2026-11-02', time: '08:00', glucose: 5.0, carbs: 20, xe: 1.5, rinFast: 3, tresiba: 12, calories: 150, notes: '', createdAt: 1 },
+    { id: '2', date: '2026-11-02', time: '12:00', glucose: 6.0, carbs: 30, xe: 2.5, rinFast: 4, tresiba: null, calories: 250, notes: '', createdAt: 2 },
+    { id: '3', date: '2026-11-02', time: '18:00', glucose: 7.0, carbs: 40, xe: 3.0, rinFast: 5, tresiba: null, calories: 350, notes: '', createdAt: 3 },
+  ];
+
+  const stats = calculatePeriodStats(entriesSameDay);
+  assert.equal(stats.totalEntries, 3);
+  assert.equal(stats.activeDaysCount, 1); // Все записи в 1 день
+  assert.equal(stats.totalRinFast, 12); // 3 + 4 + 5 = 12
+  assert.equal(stats.totalTresiba, 12);
+  assert.equal(stats.totalCarbs, 90); // 20 + 30 + 40 = 90
+  assert.equal(stats.avgDailyCarbs, 90); // 90 / 1 день
+  assert.equal(stats.totalXE, 7.0); // 1.5 + 2.5 + 3.0 = 7.0
+  assert.equal(stats.avgDailyXE, 7.0);
+  assert.equal(stats.totalCalories, 750); // 150 + 250 + 350 = 750
+  assert.equal(stats.avgDailyCalories, 750);
+});
+

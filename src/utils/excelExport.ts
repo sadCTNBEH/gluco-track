@@ -1,17 +1,25 @@
-import writeXlsxFile, { SheetData, Row, Cell } from 'write-excel-file/browser';
+import type { SheetData, Row, Cell } from 'write-excel-file/browser';
 import { DiaryEntry, UserSettings } from '../types/diabetes';
-import { evaluateGlucose, escapeFormulaInjection } from './diabetes';
+import { evaluateGlucose, escapeFormulaInjection, getTodayDateString } from './diabetes';
+import { getDiaryTagLabel } from '../constants/diaryTags';
 
-const TAG_TRANSLATIONS: Record<string, string> = {
-  breakfast: 'Завтрак',
-  lunch: 'Обед',
-  dinner: 'Ужин',
-  snack: 'Перекус',
-  fasting: 'Натощак',
-  bedtime: 'На ночь',
-  correction: 'ДПС (коррекция)',
-  other: 'Другое',
-};
+// Кэш промиса динамического импорта библиотеки write-excel-file (избегает повторной загрузки)
+let writeXlsxModulePromise: Promise<typeof import('write-excel-file/browser')> | null = null;
+
+/**
+ * Получение функции writeXlsxFile через динамический import().
+ * При сетевой ошибке сбрасывает кэш для возможности повторной попытки.
+ */
+export async function getWriteXlsxFile() {
+  if (!writeXlsxModulePromise) {
+    writeXlsxModulePromise = import('write-excel-file/browser').catch((err) => {
+      writeXlsxModulePromise = null;
+      throw err;
+    });
+  }
+  const mod = await writeXlsxModulePromise;
+  return mod.default;
+}
 
 export async function exportEntriesToXLSX(
   entries: DiaryEntry[],
@@ -59,7 +67,7 @@ export async function exportEntriesToXLSX(
       numCell(entry.rinFast),
       numCell(entry.tresiba),
       numCell(entry.calories),
-      strCell(entry.tag ? TAG_TRANSLATIONS[entry.tag] || entry.tag : ''),
+      strCell(getDiaryTagLabel(entry.tag)),
       strCell(entry.notes),
     ];
   });
@@ -68,9 +76,10 @@ export async function exportEntriesToXLSX(
 
   const targetFileName =
     fileName ||
-    `Дневник_диабета_${settings?.patientName?.replace(/\s+/g, '_') || 'пациент'}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    `Дневник_диабета_${settings?.patientName?.replace(/\s+/g, '_') || 'пациент'}_${getTodayDateString()}.xlsx`;
 
-  await writeXlsxFile(sheetData, {
+  const writeXlsx = await getWriteXlsxFile();
+  await writeXlsx(sheetData, {
     columns: [
       { width: 14 }, // Дата
       { width: 10 }, // Время

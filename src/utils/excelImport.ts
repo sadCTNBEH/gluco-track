@@ -1,12 +1,44 @@
-import readXlsxFile from 'read-excel-file/browser';
 import { DiaryEntry } from '../types/diabetes';
-import { calculateXE, unescapeFormulaInjection } from './diabetes';
+import { calculateXE, unescapeFormulaInjection, isValidDateString, formatDateISO, formatTimeISO } from './diabetes';
+
+// Кэш промиса динамического импорта библиотеки read-excel-file (избегает повторной загрузки)
+let readXlsxModulePromise: Promise<typeof import('read-excel-file/browser')> | null = null;
+
+/**
+ * Получение функции readXlsxFile через динамический import().
+ * При сетевой ошибке сбрасывает кэш для возможности повторной попытки.
+ */
+export async function getReadXlsxFile() {
+  if (!readXlsxModulePromise) {
+    readXlsxModulePromise = import('read-excel-file/browser').catch((err) => {
+      readXlsxModulePromise = null;
+      throw err;
+    });
+  }
+  const mod = await readXlsxModulePromise;
+  return mod.default;
+}
+
+export type ExcelCellValue = string | number | boolean | Date | null | undefined;
+export type ExcelRow = ExcelCellValue[];
 
 export interface ExcelImportResult {
   entries: DiaryEntry[];
   totalParsed: number;
   skippedCount: number;
   errors: string[];
+}
+
+interface SheetWithData {
+  data?: ExcelRow[];
+}
+
+function isSheetWithData(row: unknown): row is SheetWithData {
+  return typeof row === 'object' && row !== null && 'data' in row;
+}
+
+function isExcelRow(row: unknown): row is ExcelRow {
+  return Array.isArray(row);
 }
 
 /**
@@ -23,7 +55,7 @@ function normalizeHeader(val: unknown): string {
 /**
  * Парсер CSV с поддержкой кавычек и автоопределением разделителя (, или ; или \t)
  */
-export function parseCsvText(text: string): any[][] {
+export function parseCsvText(text: string): string[][] {
   // Убираем BOM, если есть
   const cleanText = text.replace(/^\uFEFF/, '');
   if (!cleanText.trim()) return [];
@@ -41,7 +73,7 @@ export function parseCsvText(text: string): any[][] {
     delimiter = '\t';
   }
 
-  const rows: any[][] = [];
+  const rows: string[][] = [];
   let currentRow: string[] = [];
   let currentField = '';
   let inQuotes = false;
@@ -87,27 +119,24 @@ export function parseCsvText(text: string): any[][] {
 }
 
 /**
- * Преобразование значения ячейки даты в строку YYYY-MM-DD
+ * Преобразование значения ячейки даты в валидную строку YYYY-MM-DD
+ * Проверяет реальность календарной даты (исключает 31 февраля, 31 апреля и т.д.)
  */
 export function parseDateCell(val: unknown): string | null {
   if (val === null || val === undefined) return null;
 
   // Если это объект Date (read-excel-file парсит даты в Date)
   if (val instanceof Date && !isNaN(val.getTime())) {
-    const y = val.getFullYear();
-    const m = String(val.getMonth() + 1).padStart(2, '0');
-    const d = String(val.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
+    const candidate = formatDateISO(val);
+    return isValidDateString(candidate) ? candidate : null;
   }
 
   // Если это числовое значение даты Excel (дни с 01.01.1900)
   if (typeof val === 'number' && val > 20000 && val < 60000) {
     const dateObj = new Date(Math.round((val - 25569) * 86400 * 1000));
     if (!isNaN(dateObj.getTime())) {
-      const y = dateObj.getFullYear();
-      const m = String(dateObj.getMonth() + 1).padStart(2, '0');
-      const d = String(dateObj.getDate()).padStart(2, '0');
-      return `${y}-${m}-${d}`;
+      const candidate = formatDateISO(dateObj);
+      return isValidDateString(candidate) ? candidate : null;
     }
   }
 
@@ -116,7 +145,7 @@ export function parseDateCell(val: unknown): string | null {
 
   // YYYY-MM-DD
   if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
-    return str;
+    return isValidDateString(str) ? str : null;
   }
 
   // DD.MM.YYYY или DD/MM/YYYY
@@ -125,7 +154,8 @@ export function parseDateCell(val: unknown): string | null {
     const d = ruMatch[1].padStart(2, '0');
     const m = ruMatch[2].padStart(2, '0');
     const y = ruMatch[3];
-    return `${y}-${m}-${d}`;
+    const candidate = `${y}-${m}-${d}`;
+    return isValidDateString(candidate) ? candidate : null;
   }
 
   // YYYY/MM/DD
@@ -134,27 +164,26 @@ export function parseDateCell(val: unknown): string | null {
     const y = isoSlash[1];
     const m = isoSlash[2].padStart(2, '0');
     const d = isoSlash[3].padStart(2, '0');
-    return `${y}-${m}-${d}`;
+    const candidate = `${y}-${m}-${d}`;
+    return isValidDateString(candidate) ? candidate : null;
   }
 
   return null;
 }
 
 /**
- * Преобразование значения ячейки времени в строку HH:mm
+ * Преобразование значения ячейки времени в строку HH:mm (24-часовой формат)
  */
 export function parseTimeCell(val: unknown): string | null {
   if (val === null || val === undefined) return null;
 
   if (val instanceof Date && !isNaN(val.getTime())) {
-    const hh = String(val.getHours()).padStart(2, '0');
-    const min = String(val.getMinutes()).padStart(2, '0');
-    return `${hh}:${min}`;
+    return formatTimeISO(val);
   }
 
   // Если время в Excel задано дробью дня (0.0 .. 1.0)
   if (typeof val === 'number' && val >= 0 && val < 1) {
-    const totalMinutes = Math.round(val * 24 * 60);
+    const totalMinutes = Math.round(val * 24 * 60) % (24 * 60);
     const h = String(Math.floor(totalMinutes / 60)).padStart(2, '0');
     const m = String(totalMinutes % 60).padStart(2, '0');
     return `${h}:${m}`;
@@ -166,9 +195,11 @@ export function parseTimeCell(val: unknown): string | null {
   // Ищем любое время формата HH:mm или H:mm (даже если есть префикс "После 04:00" или "04:00:00")
   const match = str.match(/(\d{1,2}):(\d{2})/);
   if (match) {
-    const hh = match[1].padStart(2, '0');
-    const mm = match[2];
-    return `${hh}:${mm}`;
+    const hh = parseInt(match[1], 10);
+    const mm = parseInt(match[2], 10);
+    if (hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59) {
+      return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+    }
   }
 
   return null;
@@ -193,12 +224,27 @@ export function parseNumberCell(val: unknown): number | null {
 }
 
 /**
+ * Парсинг числового значения с проверкой допустимых физиологических границ.
+ * Исключает отрицательные числа, NaN, Infinity и абсурдные выбросы.
+ */
+export function parseBoundedMetric(
+  val: unknown,
+  min: number,
+  max: number
+): number | null {
+  const num = parseNumberCell(val);
+  if (num === null) return null;
+  if (num < min || num > max) return null;
+  return num;
+}
+
+/**
  * Парсинг файла Excel (.xlsx, .xls) или CSV (.csv) и преобразование в список записей DiaryEntry
  */
 export async function parseExcelDiary(file: File, xeRatio = 12): Promise<ExcelImportResult> {
   const errors: string[] = [];
   const entries: DiaryEntry[] = [];
-  let rows: any[][] = [];
+  let rows: ExcelRow[] = [];
 
   const fileNameLower = file.name.toLowerCase();
   const isCsv = fileNameLower.endsWith('.csv') || file.type.includes('csv');
@@ -208,21 +254,17 @@ export async function parseExcelDiary(file: File, xeRatio = 12): Promise<ExcelIm
       const text = await file.text();
       rows = parseCsvText(text);
     } else {
-      const result = await readXlsxFile(file);
-      if (
-        Array.isArray(result) &&
-        result.length > 0 &&
-        typeof result[0] === 'object' &&
-        result[0] !== null &&
-        'data' in result[0]
-      ) {
-        rows = ((result as any)[0].data || []) as any[][];
+      const readXlsxFile = await getReadXlsxFile();
+      const result: unknown = await readXlsxFile(file);
+      if (Array.isArray(result) && result.length > 0 && isSheetWithData(result[0])) {
+        rows = (result[0].data || []).filter(isExcelRow);
       } else if (Array.isArray(result)) {
-        rows = result as unknown as any[][];
+        rows = result.filter(isExcelRow);
       }
     }
-  } catch (err: any) {
-    throw new Error(`Не удалось прочитать файл: ${err?.message || 'Неверный формат файла'}`);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err || 'Неверный формат файла');
+    throw new Error(`Не удалось прочитать файл: ${message}`);
   }
 
   if (!rows || rows.length === 0) {
@@ -336,15 +378,18 @@ export async function parseExcelDiary(file: File, xeRatio = 12): Promise<ExcelIm
       }
     }
 
+    const hasMedicalCol =
+      curTimeCol !== -1 ||
+      curGlucoseCol !== -1 ||
+      curNotesCol !== -1 ||
+      curRinFastCol !== -1 ||
+      curCarbsCol !== -1 ||
+      curXeCol !== -1 ||
+      curTresibaCol !== -1 ||
+      curCalCol !== -1;
+
     // Если в строке найдена дата И хотя бы один другой значимый столбец
-    if (
-      curDateCol !== -1 &&
-      (curTimeCol !== -1 ||
-        curGlucoseCol !== -1 ||
-        curNotesCol !== -1 ||
-        curRinFastCol !== -1 ||
-        curCarbsCol !== -1)
-    ) {
+    if (curDateCol !== -1 && hasMedicalCol) {
       headerIndex = r;
       dateCol = curDateCol;
       timeCol = curTimeCol;
@@ -359,9 +404,45 @@ export async function parseExcelDiary(file: File, xeRatio = 12): Promise<ExcelIm
     }
   }
 
-  // Если заголовки так и не найдены по тексту, пробуем позиционный порядок
+  let startRowIndex = 0;
+
+  // Если заголовки не найдены по тексту, проверяем строгое соответствие известному формату без заголовков
   if (headerIndex === -1) {
-    headerIndex = 0;
+    // Отбираем непустые строки для анализа структуры
+    const candidateRows = rows
+      .filter((r) => Array.isArray(r) && r.some((c) => c !== null && c !== undefined && String(c).trim() !== ''))
+      .slice(0, 5);
+
+    // Известный формат дневника без заголовков:
+    // 1. Должна быть хотя бы одна строка данных.
+    // 2. В первой колонке (col 0) обязательно валидная дата во всех строках-кандидатах.
+    // 3. Во второй колонке (col 1) валидное время во всех строках-кандидатах.
+    // 4. Как минимум в одной строке присутствует валидный клинический показатель
+    //    (col 2: глюкоза 0.1-50, col 6/7: инсулин 0-300, col 4: углеводы 0-1500).
+    const isStrictHeaderless =
+      candidateRows.length > 0 &&
+      candidateRows.every((r) => parseDateCell(r[0]) !== null) &&
+      candidateRows.every((r) => parseTimeCell(r[1]) !== null) &&
+      candidateRows.some((r) => {
+        const g = parseBoundedMetric(r[2], 0.1, 50.0);
+        const rf = parseBoundedMetric(r[6], 0, 300);
+        const tr = parseBoundedMetric(r[7], 0, 300);
+        const cb = parseBoundedMetric(r[4], 0, 1500);
+        return g !== null || rf !== null || tr !== null || cb !== null;
+      });
+
+    if (!isStrictHeaderless) {
+      return {
+        entries: [],
+        totalParsed: 0,
+        skippedCount: 0,
+        errors: [
+          'Не удалось распознать формат файла. Файл должен содержать строку заголовков (Дата, Время, Глюкоза, Инсулин, ХЕ, Заметки) или соответствовать известному формату дневника самоконтроля.',
+        ],
+      };
+    }
+
+    startRowIndex = 0;
     dateCol = 0;
     timeCol = 1;
     glucoseCol = 2;
@@ -371,11 +452,13 @@ export async function parseExcelDiary(file: File, xeRatio = 12): Promise<ExcelIm
     tresibaCol = 7;
     notesCol = 8;
     calCol = 13 < (rows[0]?.length || 0) ? 13 : 9;
+  } else {
+    startRowIndex = headerIndex + 1;
   }
 
   let skippedCount = 0;
 
-  for (let r = headerIndex + 1; r < rows.length; r++) {
+  for (let r = startRowIndex; r < rows.length; r++) {
     const row = rows[r];
     if (!row || row.length === 0) continue;
 
@@ -391,23 +474,26 @@ export async function parseExcelDiary(file: File, xeRatio = 12): Promise<ExcelIm
     const rawTime = timeCol >= 0 ? row[timeCol] : null;
     const parsedTime = parseTimeCell(rawTime) || '12:00';
 
-    const glucose = glucoseCol >= 0 ? parseNumberCell(row[glucoseCol]) : null;
-    const carbs = carbsCol >= 0 ? parseNumberCell(row[carbsCol]) : null;
-    let xe = xeCol >= 0 ? parseNumberCell(row[xeCol]) : null;
+    const glucose = glucoseCol >= 0 ? parseBoundedMetric(row[glucoseCol], 0.1, 50.0) : null;
+    const carbs = carbsCol >= 0 ? parseBoundedMetric(row[carbsCol], 0, 1500) : null;
+    let xe = xeCol >= 0 ? parseBoundedMetric(row[xeCol], 0, 120) : null;
 
     // Если ХЕ не указано, но есть граммы углеводов — рассчитываем
     if (xe === null && carbs !== null) {
-      xe = calculateXE(carbs, xeRatio);
+      const calculated = calculateXE(carbs, xeRatio);
+      if (calculated !== null && calculated >= 0 && calculated <= 120) {
+        xe = calculated;
+      }
     }
 
-    const rinFast = rinFastCol >= 0 ? parseNumberCell(row[rinFastCol]) : null;
-    const tresiba = tresibaCol >= 0 ? parseNumberCell(row[tresibaCol]) : null;
-    const calories = calCol >= 0 ? parseNumberCell(row[calCol]) : null;
+    const rinFast = rinFastCol >= 0 ? parseBoundedMetric(row[rinFastCol], 0, 300) : null;
+    const tresiba = tresibaCol >= 0 ? parseBoundedMetric(row[tresibaCol], 0, 300) : null;
+    const calories = calCol >= 0 ? parseBoundedMetric(row[calCol], 0, 20000) : null;
     const rawNotes =
       notesCol >= 0 && row[notesCol] !== null && row[notesCol] !== undefined ? String(row[notesCol]).trim() : '';
-    const notes = unescapeFormulaInjection(rawNotes);
+    const notes = unescapeFormulaInjection(rawNotes).slice(0, 2000);
 
-    // Если строка полностью пустая (нет ни сахара, ни еды, ни инсулина, ни заметок) — пропускаем
+    // Если строка полностью пустая (нет ни сахара, ни еды, ни инсулина, ни калорий, ни заметок) — пропускаем
     if (
       glucose === null &&
       carbs === null &&
@@ -454,6 +540,10 @@ export async function parseExcelDiary(file: File, xeRatio = 12): Promise<ExcelIm
       tag,
       createdAt: Date.now() - r * 1000,
     });
+  }
+
+  if (entries.length === 0 && errors.length === 0) {
+    errors.push('В файле не найдено корректных записей дневника с допустимыми значениями.');
   }
 
   return {

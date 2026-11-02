@@ -2,14 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
+import crypto from 'node:crypto';
 import cp from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 
 const BASH_PATH = 'C:/Program Files/Git/bin/bash.exe';
 const HAS_BASH = fs.existsSync(BASH_PATH);
 
-// Создаем изолированные временные каталоги для тестов (SEC-07: не трогать production-данные)
-const TEST_ROOT = path.resolve('test_sandbox_sec07');
+// Создаем изолированные временные каталоги для тестов в os.tmpdir() (SEC-07: не трогать production-данные)
+const TEST_ROOT = path.join(os.tmpdir(), `glucotrack_backup_test_${crypto.randomUUID()}`);
 const TEST_DATA_DIR = path.join(TEST_ROOT, 'data');
 const TEST_BACKUP_DIR = path.join(TEST_ROOT, 'backups');
 const TEST_BIN_DIR = path.join(TEST_ROOT, 'bin');
@@ -72,6 +74,14 @@ function cleanupTestEnvironment() {
     }
   }
 }
+
+test.after(() => {
+  cleanupTestEnvironment();
+});
+
+process.on('exit', () => {
+  cleanupTestEnvironment();
+});
 
 function runBashScript(scriptPath, env = {}, args = []) {
   const normBin = TEST_BIN_DIR.replace(/\\/g, '/');

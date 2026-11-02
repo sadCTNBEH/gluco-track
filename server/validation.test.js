@@ -1,5 +1,4 @@
-process.env.NODE_ENV = 'test';
-
+import './test_setup.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
@@ -401,7 +400,7 @@ test('SEC-05: API POST /api/entries валидирует поля и предо�
   }
 });
 
-test('SEC-05: API PUT/DELETE /api/entries/:id изолирует пользователей (403), обрабатывает 404 и 400', async () => {
+test('SEC-05: API PUT/DELETE /api/entries/:id изолирует пользователей (404 без оракула 403/404), обрабатывает 404 и 400', async () => {
   const server = app.listen(0);
   const port = server.address().port;
   const baseUrl = `http://127.0.0.1:${port}`;
@@ -434,7 +433,7 @@ test('SEC-05: API PUT/DELETE /api/entries/:id изолирует пользов�
   `).run(entryId, userA, '2026-11-02', '10:00', 5.0, 20, now);
 
   try {
-    // 1. Пользователь B пытается обновить чужую запись A -> 403 Forbidden
+    // 1. Пользователь B пытается обновить чужую запись A -> 404 Not Found (без оракула 403)
     const updateAlienRes = await fetch(`${baseUrl}/api/entries/${entryId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tokenB}` },
@@ -444,14 +443,14 @@ test('SEC-05: API PUT/DELETE /api/entries/:id изолирует пользов�
         glucose: 9.9,
       }),
     });
-    assert.equal(updateAlienRes.status, 403, 'Обновление чужой записи должно быть строго запрещено (403)');
+    assert.equal(updateAlienRes.status, 404, 'Обновление чужой записи должно возвращать 404 Not Found');
 
-    // 2. Пользователь B пытается удалить чужую запись A -> 403 Forbidden
+    // 2. Пользователь B пытается удалить чужую запись A -> 404 Not Found (без оракула 403)
     const deleteAlienRes = await fetch(`${baseUrl}/api/entries/${entryId}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${tokenB}` },
     });
-    assert.equal(deleteAlienRes.status, 403, 'Удаление чужой записи должно возвращать 403 Forbidden');
+    assert.equal(deleteAlienRes.status, 404, 'Удаление чужой записи должно возвращать 404 Not Found');
 
     // Запись A должна остаться нетронутой в базе
     const checkEntry = db.prepare('SELECT glucose FROM entries WHERE id = ?').get(entryId);

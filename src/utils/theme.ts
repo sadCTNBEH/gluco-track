@@ -2,10 +2,14 @@ export type Theme = 'light' | 'dark' | 'system';
 
 const THEME_STORAGE_KEY = 'glucotrack_theme';
 
+export function isTheme(val: unknown): val is Theme {
+  return val === 'light' || val === 'dark' || val === 'system';
+}
+
 export function getInitialTheme(): Theme {
   if (typeof window === 'undefined') return 'dark';
-  const saved = localStorage.getItem(THEME_STORAGE_KEY) as Theme | null;
-  if (saved === 'light' || saved === 'dark' || saved === 'system') {
+  const saved = localStorage.getItem(THEME_STORAGE_KEY);
+  if (isTheme(saved)) {
     return saved;
   }
   // По умолчанию предпочитаем темную тему как наиболее комфортную для медицинских дашбордов

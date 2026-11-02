@@ -9,7 +9,7 @@ import {
   Database,
 } from 'lucide-react';
 import { DiaryEntry } from '../types/diabetes';
-import { parseExcelDiary, ExcelImportResult } from '../utils/excelImport';
+import type { ExcelImportResult } from '../utils/excelImport';
 import { evaluateGlucose } from '../utils/diabetes';
 import { Modal } from './ui/Modal';
 import { Button } from './ui/Button';
@@ -67,13 +67,15 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
     setParsing(true);
 
     try {
+      const { parseExcelDiary } = await import('../utils/excelImport');
       const result = await parseExcelDiary(selectedFile, xeRatio);
       if (result.entries.length === 0) {
-        setError('В файле не найдено строк с записями или даты не распознаны.');
+        setError(result.errors?.[0] || 'В файле не найдено строк с записями или даты не распознаны.');
       }
       setParseResult(result);
-    } catch (err: any) {
-      setError(err?.message || 'Ошибка разбора файла Excel / CSV');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Ошибка разбора файла Excel / CSV';
+      setError(message);
       setParseResult(null);
     } finally {
       setParsing(false);
@@ -100,8 +102,9 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
     try {
       await onImport(parseResult.entries, replaceAll);
       handleClose();
-    } catch (err: any) {
-      setError(err?.message || 'Ошибка импорта в базу данных');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Ошибка импорта в базу данных';
+      setError(message);
     } finally {
       setImporting(false);
     }

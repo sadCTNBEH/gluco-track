@@ -1,6 +1,6 @@
 import React from 'react';
 import { DiaryEntry, UserSettings } from '../types/diabetes';
-import { calculateMonthlyStats, evaluateGlucose } from '../utils/diabetes';
+import { calculatePeriodStats, evaluateGlucose } from '../utils/diabetes';
 import { Activity, Award, Target, Syringe, Moon } from 'lucide-react';
 
 interface TelemetryBarProps {
@@ -14,16 +14,14 @@ export const TelemetryBar: React.FC<TelemetryBarProps> = ({
   settings,
   patientName,
 }) => {
-  const stats = calculateMonthlyStats(entries, undefined, settings);
+  const stats = calculatePeriodStats(entries, settings);
   const glucoseEval = stats.avgGlucose !== null ? evaluateGlucose(stats.avgGlucose, settings) : null;
 
   const bolusName = settings.bolusName || 'РинФаст';
   const basalName = settings.basalName || 'Тресиба';
 
-  const estimatedHbA1c =
-    stats.avgGlucose !== null
-      ? Number(((stats.avgGlucose + 2.59) / 1.59).toFixed(1))
-      : null;
+  // Единый расчет eHbA1c из сводной статистики
+  const estimatedHbA1c = stats.estimatedHbA1c;
 
   const percentNormal = stats.tir.normalPercent;
   const percentLow = stats.tir.lowPercent;
@@ -142,7 +140,7 @@ export const TelemetryBar: React.FC<TelemetryBarProps> = ({
           {/* Card 3: Оценочный eHbA1c */}
           <div className="p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-850/60 flex flex-col justify-between space-y-2 shadow-2xs">
             <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-              <span className="font-semibold">{settings.eHbA1c ? 'Лабораторный eHbA1c' : 'Расчетный eHbA1c'}</span>
+              <span className="font-semibold">{settings.eHbA1c ? 'Лабораторный HbA1c' : 'Расчетный eHbA1c'}</span>
               <div className="w-6 h-6 rounded-lg bg-sky-500/10 text-sky-600 dark:text-sky-400 flex items-center justify-center">
                 <Target className="w-3.5 h-3.5" />
               </div>

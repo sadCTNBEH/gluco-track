@@ -1,29 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { DiaryEntry, UserSettings } from '../types/diabetes';
-import { evaluateGlucose, calculateXE } from '../utils/diabetes';
-import { X, Check, Activity, Utensils, Syringe, Moon, Flame, Clock, Calendar, AlertCircle } from 'lucide-react';
+import { DiaryEntry, UserSettings, DraftDiaryEntry } from '../types/diabetes';
+import { evaluateGlucose, calculateXE, getTodayDateString, getCurrentTimeString } from '../utils/diabetes';
+import { CONTEXT_TAGS } from '../constants/diaryTags';
+import { Check, Activity, Utensils, Syringe, Moon, Flame, Clock, Calendar, AlertCircle } from 'lucide-react';
+import { Modal } from './ui/Modal';
+import { Button } from './ui/Button';
 
 interface EntryModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (entry: Omit<DiaryEntry, 'id' | 'createdAt'> & { id?: string }) => void;
+  onSave: (entry: DraftDiaryEntry) => void;
   initialEntry?: DiaryEntry | null;
   xeRatio?: number;
   bolusName?: string;
   basalName?: string;
   settings?: UserSettings;
 }
-
-const CONTEXT_TAGS = [
-  { id: 'fasting', label: 'Натощак' },
-  { id: 'breakfast', label: 'Завтрак' },
-  { id: 'lunch', label: 'Обед' },
-  { id: 'dinner', label: 'Ужин' },
-  { id: 'snack', label: 'Перекус' },
-  { id: 'bedtime', label: 'На ночь' },
-  { id: 'correction', label: 'Коррекция (ДПС)' },
-  { id: 'other', label: 'Другое' },
-] as const;
 
 export const EntryModal: React.FC<EntryModalProps> = ({
   isOpen,
@@ -63,15 +55,8 @@ export const EntryModal: React.FC<EntryModalProps> = ({
       setTag(initialEntry.tag || 'other');
       setManualXe(false);
     } else {
-      const now = new Date();
-      const yyyy = now.getFullYear();
-      const mm = String(now.getMonth() + 1).padStart(2, '0');
-      const dd = String(now.getDate()).padStart(2, '0');
-      const hh = String(now.getHours()).padStart(2, '0');
-      const min = String(now.getMinutes()).padStart(2, '0');
-
-      setDate(`${yyyy}-${mm}-${dd}`);
-      setTime(`${hh}:${min}`);
+      setDate(getTodayDateString());
+      setTime(getCurrentTimeString());
       setGlucoseStr('');
       setCarbsStr('');
       setXeStr('');
@@ -83,16 +68,6 @@ export const EntryModal: React.FC<EntryModalProps> = ({
       setManualXe(false);
     }
   }, [initialEntry, isOpen]);
-
-  // Handle ESC key to close modal
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
 
   // Автоматический пересчет ХЕ при вводе углеводов
   const handleCarbsChange = (val: string) => {
@@ -128,7 +103,7 @@ export const EntryModal: React.FC<EntryModalProps> = ({
 
     onSave({
       id: initialEntry ? initialEntry.id : undefined,
-      date: date || new Date().toISOString().slice(0, 10),
+      date: date || getTodayDateString(),
       time: time || '12:00',
       glucose: gVal !== null && !isNaN(gVal) ? Number(gVal.toFixed(1)) : null,
       carbs: cVal !== null && !isNaN(cVal) ? Math.round(cVal) : null,
@@ -143,46 +118,18 @@ export const EntryModal: React.FC<EntryModalProps> = ({
     onClose();
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/60 transition-opacity"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="entry-modal-title"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={initialEntry ? 'Редактировать запись' : 'Новая запись в дневник'}
+      subtitle="Учет глюкозы, инсулина, углеводов и ХЕ"
+      icon={<Activity className="w-5 h-5 text-teal-600 dark:text-teal-400" />}
+      maxWidth="2xl"
+      initialFocusRef={glucoseInputRef}
     >
-      <div className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-t-2xl sm:rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xl overflow-hidden flex flex-col max-h-[92vh] sm:max-h-[88vh] animate-fadeIn">
-        
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-teal-600 text-white flex items-center justify-center shrink-0">
-              <Activity className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 id="entry-modal-title" className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
-                {initialEntry ? 'Редактировать запись' : 'Новая запись в дневник'}
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Учет глюкозы, инсулина, углеводов и ХЕ
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center"
-            aria-label="Закрыть"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-5 sm:p-6 overflow-y-auto space-y-4 text-xs sm:text-sm">
+      {/* Form Body */}
+      <form onSubmit={handleSubmit} className="space-y-4 text-xs sm:text-sm">
           
           {/* Дата и Время */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
@@ -218,10 +165,7 @@ export const EntryModal: React.FC<EntryModalProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    const now = new Date();
-                    const hh = String(now.getHours()).padStart(2, '0');
-                    const mm = String(now.getMinutes()).padStart(2, '0');
-                    setTime(`${hh}:${mm}`);
+                    setTime(getCurrentTimeString());
                   }}
                   className="h-11 px-3.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-semibold hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer min-w-[64px]"
                 >
@@ -241,7 +185,7 @@ export const EntryModal: React.FC<EntryModalProps> = ({
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => setTag(item.id as any)}
+                  onClick={() => setTag(item.id)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer min-h-[36px] ${
                     tag === item.id
                       ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
@@ -496,24 +440,25 @@ export const EntryModal: React.FC<EntryModalProps> = ({
 
           {/* Footer Action Buttons */}
           <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2.5">
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="md"
               onClick={onClose}
-              className="h-11 px-4 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs sm:text-sm font-semibold hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer min-h-[44px]"
             >
               Отмена
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
-              className="h-11 px-5 rounded-lg bg-teal-600 hover:bg-teal-700 active:bg-teal-800 text-white text-xs sm:text-sm font-semibold shadow-xs flex items-center gap-2 transition cursor-pointer min-h-[44px]"
+              variant="primary"
+              size="md"
+              icon={<Check className="w-4 h-4" />}
             >
-              <Check className="w-4 h-4" />
               <span>{initialEntry ? 'Сохранить изменения' : 'Добавить запись'}</span>
-            </button>
+            </Button>
           </div>
 
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 };

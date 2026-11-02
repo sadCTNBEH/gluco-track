@@ -1,7 +1,10 @@
+import './test_setup.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { rateLimit } from 'express-rate-limit';
@@ -238,7 +241,7 @@ test('SEC-09: Валидация Dockerfile и Docker Compose (USER node, no-new
 });
 
 test('SEC-09: SQLite и WAL работают корректно при записи и чтении (совместимость с непривилегированным пользователем)', () => {
-  const testDir = path.join(ROOT_DIR, 'data', `test_sec09_${Date.now()}`);
+  const testDir = path.join(os.tmpdir(), `glucotrack_sec09_${crypto.randomUUID()}`);
   fs.mkdirSync(testDir, { recursive: true });
 
   const testDbPath = path.join(testDir, 'test.db');

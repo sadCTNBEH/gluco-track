@@ -12,6 +12,30 @@ export interface AuthResponse {
   token: string;
 }
 
+export class ApiError extends Error {
+  status?: number;
+  data?: unknown;
+  isNetworkError: boolean;
+
+  constructor(message: string, status?: number, data?: unknown, isNetworkError = false) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.data = data;
+    this.isNetworkError = isNetworkError;
+  }
+}
+
+/**
+ * Очищает внутренние метаданные синхронизации перед отправкой на сервер.
+ */
+export function sanitizeEntryForServer<T extends Partial<DiaryEntry>>(
+  entry: T
+): Omit<T, '_syncStatus' | '_syncError' | '_lastModified'> {
+  const { _syncStatus, _syncError, _lastModified, ...clean } = entry;
+  return clean as Omit<T, '_syncStatus' | '_syncError' | '_lastModified'>;
+}
+
 export function getStoredToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
@@ -33,10 +57,21 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const res = await fetch(endpoint, {
-    ...options,
-    headers,
-  });
+  let res: Response;
+  try {
+    res = await fetch(endpoint, {
+      ...options,
+      headers,
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Сетевая ошибка: сервер недоступен';
+    throw new ApiError(
+      message,
+      undefined,
+      undefined,
+      true
+    );
+  }
 
   if (res.status === 401) {
     removeStoredToken();
@@ -45,7 +80,12 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    throw new Error(data.error || `Ошибка сервера (${res.status})`);
+    throw new ApiError(
+      data.error || `Ошибка сервера (${res.status})`,
+      res.status,
+      data,
+      false
+    );
   }
 
   return data as T;
@@ -100,14 +140,14 @@ export const api = {
   async createEntry(entry: Omit<DiaryEntry, 'id' | 'createdAt'> & { id?: string }): Promise<DiaryEntry> {
     return request<DiaryEntry>('/api/entries', {
       method: 'POST',
-      body: JSON.stringify(entry),
+      body: JSON.stringify(sanitizeEntryForServer(entry)),
     });
   },
 
   async updateEntry(id: string, entry: Omit<DiaryEntry, 'id' | 'createdAt'>): Promise<DiaryEntry> {
     return request<DiaryEntry>(`/api/entries/${id}`, {
       method: 'PUT',
-      body: JSON.stringify(entry),
+      body: JSON.stringify(sanitizeEntryForServer(entry)),
     });
   },
 
@@ -130,9 +170,10 @@ export const api = {
   },
 
   async importEntries(entries: DiaryEntry[], replaceAll = false): Promise<{ importedCount: number }> {
+    const cleanEntries = entries.map((e) => sanitizeEntryForServer(e));
     return request<{ importedCount: number }>('/api/entries/import', {
       method: 'POST',
-      body: JSON.stringify({ entries, replaceAll }),
+      body: JSON.stringify({ entries: cleanEntries, replaceAll }),
     });
   },
 
