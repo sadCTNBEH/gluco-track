@@ -180,7 +180,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess, onOpenPolicy 
                     className="mt-0.5 w-4 h-4 rounded border-slate-700 bg-slate-950 text-teal-600 focus:ring-teal-500 accent-teal-600 shrink-0 cursor-pointer"
                   />
                   <span className="text-[11px] leading-relaxed text-slate-400">
-                    Я подтверждаю свое согласие на обработку персональных данных, включая сведения о состоянии здоровья (152-ФЗ РФ), и принимаю{' '}
+                    Я подтверждаю свое согласие на обработку данных о здоровье и трансграничную передачу на сервер в Нидерландах (ст. 10 и ст. 12 152-ФЗ РФ), а также принимаю{' '}
                     <button
                       type="button"
                       onClick={() => onOpenPolicy('policy')}
@@ -218,11 +218,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess, onOpenPolicy 
             </button>
           </form>
 
-          {/* Плашка соответствия 152-ФЗ и локализации РФ */}
+          {/* Плашка защиты данных и сервера в Нидерландах */}
           <div className="mt-5 pt-4 border-t border-slate-800/80 flex flex-col gap-2 text-[11px] text-slate-500 text-center">
             <div className="flex items-center justify-center gap-1.5 text-slate-400">
               <Database className="w-3.5 h-3.5 text-teal-400" />
-              <span>База данных расположена в РФ (ч. 5 ст. 18 152-ФЗ)</span>
+              <span>Сервер в Нидерландах (ст. 12 152-ФЗ РФ / GDPR / ETS № 108)</span>
             </div>
             <div className="flex items-center justify-center gap-3">
               <button

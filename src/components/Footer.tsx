@@ -45,8 +45,8 @@ export const Footer: React.FC<FooterProps> = ({ onOpenPolicy, onOpenMedical }) =
           <div className="flex items-start gap-2 bg-slate-50 dark:bg-slate-800/30 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800/40">
             <Database className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0 mt-0.5" />
             <div>
-              <span className="font-semibold text-slate-700 dark:text-slate-300">Локализация данных в РФ:</span>{' '}
-              База данных и сервер размещены на территории Российской Федерации в полном соответствии со ст. 18.5 Федерального закона № 152-ФЗ.
+              <span className="font-semibold text-slate-700 dark:text-slate-300">Сервер и защита данных:</span>{' '}
+              Размещение в Нидерландах. Обеспечивается адекватная защита персональных данных в соответствии с Конвенцией Совета Европы ETS № 108, ст. 12 152-ФЗ РФ и GDPR.
             </div>
           </div>
 
