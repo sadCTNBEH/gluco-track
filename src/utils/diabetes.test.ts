@@ -238,3 +238,58 @@ test('calculateMonthlyStats: calculates TIR and monthly averages', () => {
   assert.equal(stats.totalTresiba, 28);
   assert.equal(stats.avgDailyTresiba, 14);
 });
+
+test('parseExcelDiary: correctly imports complex Russian diabetes CSV/Excel with summary columns', async () => {
+  const { parseExcelDiary } = await import('./excelImport.ts');
+
+  const csv = `ДНЕВНИК САМОКОНТРОЛЯ ДИАБЕТА · РинФаст + Тресиба,,,,,,,,,,,,,
+"ШКАЛА:  < 5 — низкий  ·  5–10 — норма  ·  > 10 и < 13,9 — высокий  ·  ≥ 13,9 — крайне высокий",,,,,,,,,,,,,
+Период: 18 октября — 2 ноября 2026,,,,,,,,22 октября: печенье подтверждено; 24 октября: записей нет,,,,,
+,,,,,,,,,,,,,
+Дата,Время,Глюкоза (ммоль/л),Оценка (авто),Углеводы (г),ХЕ (авто),РинФаст (ЕД),Тресиба (ЕД),Еда / нагрузка / комментарий,Ср. сахар за день,Замеров за день,Сумма ХЕ за день,РинФаст за день,Ккал (оценка)
+18.10.2026,21:00,,,,,5,,Ужин: 4–5 ложек риса и 400 г горбуши; РинФаст 5 ЕД,9,1,0,5,
+18.10.2026,22:00,9,Норма,,,,,"Перед сном, измерение",,,,,
+18.10.2026,23:30,,,,,,14,Тресиба 14 ЕД,,,,,
+19.10.2026,01:00,10.4,Высокий,,,2,,Инъекция РинФаст,9.5777777777777757,18,8.5208333333333339,28,
+20.10.2026,11:32,,,,,,,"Завтрак: гречка, хлеб, яблоко, котлета",,,,,505
+20.10.2026,22:32,12.4,Высокий,,,3,14,Инъекция РинФаст; Тресиба,,,,,
+22.10.2026,После 04:00,,,6,0.5,,,"Сахар 6 г, точное время не указано",,,,,24`;
+
+  const file = new File([csv], 'diary.csv', { type: 'text/csv' });
+  const result = await parseExcelDiary(file);
+
+  assert.equal(result.entries.length, 7);
+
+  // Row 1: 18.10.2026 21:00, RinFast 5
+  assert.equal(result.entries[0].date, '2026-10-18');
+  assert.equal(result.entries[0].time, '21:00');
+  assert.equal(result.entries[0].rinFast, 5);
+  assert.equal(result.entries[0].glucose, null);
+
+  // Row 2: 18.10.2026 22:00, Glucose 9
+  assert.equal(result.entries[1].date, '2026-10-18');
+  assert.equal(result.entries[1].time, '22:00');
+  assert.equal(result.entries[1].glucose, 9);
+
+  // Row 3: 18.10.2026 23:30, Tresiba 14
+  assert.equal(result.entries[2].tresiba, 14);
+
+  // Row 4: 19.10.2026 01:00, Glucose 10.4, RinFast 2 (NOT 28 from 'РинФаст за день'!)
+  assert.equal(result.entries[3].date, '2026-10-19');
+  assert.equal(result.entries[3].glucose, 10.4);
+  assert.equal(result.entries[3].rinFast, 2);
+
+  // Row 5: 20.10.2026 11:32, Calories 505
+  assert.equal(result.entries[4].calories, 505);
+
+  // Row 6: 20.10.2026 22:32, Glucose 12.4, RinFast 3, Tresiba 14
+  assert.equal(result.entries[5].glucose, 12.4);
+  assert.equal(result.entries[5].rinFast, 3);
+  assert.equal(result.entries[5].tresiba, 14);
+
+  // Row 7: 22.10.2026 "После 04:00" -> time 04:00, Carbs 6, XE 0.5, Calories 24
+  assert.equal(result.entries[6].time, '04:00');
+  assert.equal(result.entries[6].carbs, 6);
+  assert.equal(result.entries[6].xe, 0.5);
+  assert.equal(result.entries[6].calories, 24);
+});

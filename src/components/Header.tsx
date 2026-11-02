@@ -134,14 +134,14 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
             )}
 
-            {/* Импорт из Excel */}
+            {/* Импорт из Excel / CSV */}
             <button
               onClick={onExcelImportClick}
               className="hidden sm:flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20 transition cursor-pointer"
-              title="Импорт записей из файла .xlsx"
+              title="Импорт записей из файла .xlsx или .csv"
             >
               <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              <span>Импорт Excel</span>
+              <span>Импорт Excel / CSV</span>
             </button>
 
             {/* Настройки */}

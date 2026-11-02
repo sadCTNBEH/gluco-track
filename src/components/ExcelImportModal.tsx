@@ -29,8 +29,16 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
   if (!isOpen) return null;
 
   const handleFileProcess = async (selectedFile: File) => {
-    if (!selectedFile.name.endsWith('.xlsx') && !selectedFile.name.endsWith('.xls')) {
-      setError('Пожалуйста, выберите файл с расширением .xlsx');
+    const nameLower = selectedFile.name.toLowerCase();
+    const isValid =
+      nameLower.endsWith('.xlsx') ||
+      nameLower.endsWith('.xls') ||
+      nameLower.endsWith('.csv') ||
+      nameLower.endsWith('.tsv') ||
+      nameLower.endsWith('.txt');
+
+    if (!isValid) {
+      setError('Пожалуйста, выберите файл с расширением .xlsx, .xls или .csv');
       return;
     }
 
@@ -45,7 +53,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
       }
       setParseResult(result);
     } catch (err: any) {
-      setError(err?.message || 'Ошибка разбора файла Excel');
+      setError(err?.message || 'Ошибка разбора файла Excel / CSV');
       setParseResult(null);
     } finally {
       setParsing(false);
@@ -91,16 +99,16 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
             </div>
             <div>
               <h3 className="font-bold text-base text-slate-900 dark:text-white">
-                Импорт из Excel (.xlsx)
+                Импорт из Excel / CSV (.xlsx, .csv)
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Автоматическое распознавание замеров, дозировок инсулина и углеводов
+                Автоматическое распознавание замеров сахара, РинФаст, Тресиба, ХЕ и питания
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-200/50 dark:hover:bg-slate-800 transition"
+            className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-200/50 dark:hover:bg-slate-800 transition cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -135,7 +143,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".xlsx, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                accept=".xlsx, .xls, .csv, text/csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
                 onChange={handleFileInputChange}
                 className="hidden"
               />
@@ -147,15 +155,15 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
               {parsing ? (
                 <div className="flex items-center justify-center gap-2 text-teal-600">
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  <span className="font-semibold text-sm">Чтение и парсинг файла Excel...</span>
+                  <span className="font-semibold text-sm">Чтение и парсинг файла таблицы...</span>
                 </div>
               ) : (
                 <>
                   <p className="font-bold text-slate-800 dark:text-slate-200 mb-1">
-                    Перетащите сюда .xlsx файл или нажмите для выбора
+                    Перетащите сюда .xlsx или .csv файл или нажмите для выбора
                   </p>
                   <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
-                    Поддерживаются стандартные таблицы с колонками: Дата, Время, Сахар / Глюкоза, РинФаст, Тресиба, ХЕ, Углеводы, Заметки
+                    Поддерживаются таблицы с колонками: Дата, Время, Глюкоза / Сахар, РинФаст, Тресиба, ХЕ, Углеводы, Калории, Заметки
                   </p>
                 </>
               )}
