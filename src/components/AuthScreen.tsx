@@ -7,7 +7,6 @@ import {
   ShieldCheck,
   ArrowRight,
   Loader2,
-  Database,
   AlertCircle,
   FileText,
 } from 'lucide-react';
@@ -73,10 +72,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess, onOpenPolicy 
             <Activity className="w-6 h-6" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-            GlucoTrack <span className="text-teal-600 dark:text-teal-400 font-semibold">Pro</span>
+            GlucoTrack
           </h1>
           <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 max-w-xs mx-auto leading-relaxed">
-            Клинический дневник самоконтроля: гликемия, РинФаст, Тресиба и ХЕ
+            Клинический дневник самоконтроля
           </p>
         </div>
 
@@ -151,7 +150,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess, onOpenPolicy 
                   required
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Придумайте логин"
+                  placeholder="Логин"
                   className="w-full min-h-[44px] pl-10 pr-3.5 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-colors"
                 />
               </div>
@@ -215,7 +214,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess, onOpenPolicy 
                     className="mt-0.5 w-4 h-4 rounded border-slate-300 dark:border-slate-700 text-teal-600 focus:ring-teal-500 accent-teal-600 shrink-0 cursor-pointer"
                   />
                   <span className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
-                    Я подтверждаю согласие на обработку персональных данных и трансграничную передачу на сервер в Нидерландах (ст. 10 и ст. 12 152-ФЗ РФ), и принимаю{' '}
+                    Я подтверждаю согласие на обработку персональных данных (ст. 10 и ст. 12 152-ФЗ РФ) и принимаю{' '}
                     <button
                       type="button"
                       onClick={() => onOpenPolicy('policy')}
@@ -257,29 +256,23 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess, onOpenPolicy 
             </div>
           </form>
 
-          {/* Trust badges */}
-          <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-2.5 text-[11px] text-slate-500 dark:text-slate-400 text-center">
-            <div className="flex items-center justify-center gap-2 font-medium">
-              <Database className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-              <span>Сервер в Нидерландах • БД SQLite • Бэкап 00:00 МСК</span>
-            </div>
-            <div className="flex items-center justify-center gap-3">
-              <button
-                type="button"
-                onClick={() => onOpenPolicy('policy')}
-                className="hover:text-teal-600 dark:hover:text-teal-400 underline underline-offset-2 transition cursor-pointer"
-              >
-                152-ФЗ Конфиденциальность
-              </button>
-              <span>•</span>
-              <button
-                type="button"
-                onClick={() => onOpenPolicy('medical')}
-                className="hover:text-teal-600 dark:hover:text-teal-400 underline underline-offset-2 transition cursor-pointer"
-              >
-                Медицинский дисклеймер
-              </button>
-            </div>
+          {/* Links */}
+          <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-center gap-3 text-[11px] text-slate-500 dark:text-slate-400 text-center">
+            <button
+              type="button"
+              onClick={() => onOpenPolicy('policy')}
+              className="hover:text-teal-600 dark:hover:text-teal-400 underline underline-offset-2 transition cursor-pointer"
+            >
+              152-ФЗ Конфиденциальность
+            </button>
+            <span>•</span>
+            <button
+              type="button"
+              onClick={() => onOpenPolicy('medical')}
+              className="hover:text-teal-600 dark:hover:text-teal-400 underline underline-offset-2 transition cursor-pointer"
+            >
+              Медицинский дисклеймер
+            </button>
           </div>
 
         </div>

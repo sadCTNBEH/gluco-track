@@ -45,7 +45,7 @@ export const Footer: React.FC<FooterProps> = ({ onOpenPolicy, onOpenMedical }) =
             <Database className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0 mt-0.5" />
             <div>
               <span className="font-semibold text-slate-700 dark:text-slate-300">Сервер и защита данных:</span>{' '}
-              Размещение в Нидерландах. Обеспечивается защита персональных данных в соответствии с Конвенцией Совета Европы ETS № 108, ст. 12 152-ФЗ РФ и GDPR.
+              Обеспечивается защита персональных данных в соответствии с Конвенцией Совета Европы ETS № 108, ст. 12 152-ФЗ РФ и GDPR.
             </div>
           </div>
 
