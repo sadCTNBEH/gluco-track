@@ -1,7 +1,7 @@
 import React from 'react';
 import { DiaryEntry, UserSettings } from '../types/diabetes';
 import { calculateMonthlyStats, evaluateGlucose } from '../utils/diabetes';
-import { Target, Activity, Award, Syringe } from 'lucide-react';
+import { Activity, Award, Target, Syringe, Moon } from 'lucide-react';
 
 interface TelemetryBarProps {
   entries: DiaryEntry[];
@@ -20,7 +20,6 @@ export const TelemetryBar: React.FC<TelemetryBarProps> = ({
   const bolusName = settings.bolusName || 'РинФаст';
   const basalName = settings.basalName || 'Тресиба';
 
-  // Оценочный расчет eHbA1c по формуле DCCT/NGSP
   const estimatedHbA1c =
     stats.avgGlucose !== null
       ? Number(((stats.avgGlucose + 2.59) / 1.59).toFixed(1))
@@ -32,172 +31,173 @@ export const TelemetryBar: React.FC<TelemetryBarProps> = ({
 
   return (
     <section
-      aria-label="Сводка самоконтроля"
-      className="print:hidden border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xs py-3.5 px-4 sm:px-6 transition-colors"
+      aria-label="Сводка ключевых показателей здоровья"
+      className="print:hidden border-b border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900/60 py-4 px-4 sm:px-6 transition-colors shadow-xs"
     >
-      <div className="max-w-7xl mx-auto space-y-3">
+      <div className="max-w-7xl mx-auto space-y-3.5">
         
-        {/* Информационная строка: Пациент, целевые значения, пропорция ХЕ */}
-        <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
-          
-          <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-slate-600 dark:text-slate-400">
-            <div className="font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+        {/* Top Patient Strip */}
+        <div className="flex flex-wrap items-center justify-between gap-2.5 text-xs text-slate-500 dark:text-slate-400">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3.5">
+            <span className="font-semibold text-slate-900 dark:text-white flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-teal-600 shrink-0" />
-              <span>Пациент: <strong className="text-slate-900 dark:text-white">{patientName}</strong></span>
+              <span>Пациент: <strong>{patientName}</strong></span>
+            </span>
+
+            <span className="hidden sm:inline text-slate-300 dark:text-slate-700">•</span>
+
+            <span className="hidden sm:inline">
+              Цель: <strong className="font-mono text-slate-800 dark:text-slate-200">{settings.targetLow} – {settings.targetHigh} ммоль/л</strong>
+            </span>
+
+            <span className="hidden md:inline text-slate-300 dark:text-slate-700">•</span>
+
+            <span className="hidden md:inline">
+              1 ХЕ = <strong className="font-mono text-slate-800 dark:text-slate-200">{settings.xeRatio} г</strong>
+            </span>
+          </div>
+
+          <div className="text-[11px] font-mono text-slate-400">
+            {stats.totalEntries > 0 ? (
+              <span>Всего замеров: <strong>{stats.totalEntries}</strong> ({stats.activeDaysCount} дн.)</span>
+            ) : (
+              <span>Нет сохраненных замеров</span>
+            )}
+          </div>
+        </div>
+
+        {/* 4 Apple Health Style Telemetry Widget Cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          
+          {/* Card 1: Средняя гликемия */}
+          <div className="p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-850/60 flex flex-col justify-between space-y-2 shadow-2xs">
+            <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+              <span className="font-semibold">Средняя глюкоза</span>
+              <div className="w-6 h-6 rounded-lg bg-teal-500/10 text-teal-600 dark:text-teal-400 flex items-center justify-center">
+                <Activity className="w-3.5 h-3.5" />
+              </div>
             </div>
 
-            <span className="hidden sm:inline text-slate-300 dark:text-slate-700">|</span>
+            <div>
+              <div className="flex items-baseline gap-1.5">
+                <span className={`font-mono text-2xl sm:text-3xl font-extrabold tracking-tight tabular-nums ${glucoseEval ? glucoseEval.textClass : 'text-slate-900 dark:text-white'}`}>
+                  {stats.avgGlucose !== null ? stats.avgGlucose : '—'}
+                </span>
+                <span className="text-xs text-slate-400 font-sans">ммоль/л</span>
+              </div>
 
-            <div className="hidden sm:flex items-center gap-1.5">
-              <Target className="w-3.5 h-3.5 text-slate-400" />
-              <span>Цель:</span>
-              <strong className="font-mono text-slate-800 dark:text-slate-200">
-                {settings.targetLow} – {settings.targetHigh} ммоль/л
-              </strong>
-            </div>
-
-            <span className="hidden lg:inline text-slate-300 dark:text-slate-700">|</span>
-
-            <div className="hidden lg:flex items-center gap-1.5">
-              <span>Терапия:</span>
-              <strong className="text-slate-800 dark:text-slate-200">
-                {bolusName} + {basalName}
-              </strong>
-            </div>
-
-            <span className="hidden lg:inline text-slate-300 dark:text-slate-700">|</span>
-
-            <div className="hidden lg:flex items-center gap-1.5">
-              <span>1 ХЕ = <strong className="font-mono text-slate-800 dark:text-slate-200">{settings.xeRatio} г</strong></span>
+              {glucoseEval ? (
+                <div className="mt-1 flex items-center gap-1">
+                  <span className={`text-[10px] px-2 py-0.5 rounded-md font-semibold border ${glucoseEval.badgeClass}`}>
+                    {glucoseEval.shortLabel}
+                  </span>
+                </div>
+              ) : (
+                <span className="text-[11px] text-slate-400 mt-1 block">нет данных</span>
+              )}
             </div>
           </div>
 
-          {/* Правый блок: Средняя глюкоза и целевой диапазон */}
-          <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
-            {stats.avgGlucose !== null && (
-              <div className="flex items-center gap-2 px-3 py-1 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 text-xs shadow-xs">
-                <Activity className="w-3.5 h-3.5 text-slate-400" />
-                <span className="text-slate-500 dark:text-slate-400">Ср. сахар:</span>
-                <span className={`font-mono font-bold text-sm tabular-nums ${glucoseEval?.textClass}`}>
-                  {stats.avgGlucose} ммоль/л
+          {/* Card 2: Доля в целевом диапазоне */}
+          <div className="p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-850/60 flex flex-col justify-between space-y-2 shadow-2xs">
+            <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+              <span className="font-semibold">В целевом диапазоне</span>
+              <div className="w-6 h-6 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                <Award className="w-3.5 h-3.5" />
+              </div>
+            </div>
+
+            <div>
+              <div className="flex items-baseline gap-1">
+                <span className="font-mono text-2xl sm:text-3xl font-extrabold tracking-tight text-emerald-700 dark:text-emerald-400 tabular-nums">
+                  {stats.totalEntries > 0 ? `${percentNormal}%` : '—'}
                 </span>
-                {glucoseEval && (
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded border font-semibold ${glucoseEval.badgeClass}`}>
-                    {glucoseEval.shortLabel}
+              </div>
+
+              {/* Multi-segment micro bar */}
+              {stats.totalEntries > 0 ? (
+                <div className="space-y-1 mt-1.5">
+                  <div className="h-1.5 rounded-full overflow-hidden bg-slate-200 dark:bg-slate-700 flex w-full">
+                    {percentLow > 0 && (
+                      <div style={{ width: `${percentLow}%` }} className="bg-amber-500 h-full" title={`Низкий: ${percentLow}%`} />
+                    )}
+                    {percentNormal > 0 && (
+                      <div style={{ width: `${percentNormal}%` }} className="bg-emerald-600 h-full" title={`В норме: ${percentNormal}%`} />
+                    )}
+                    {percentHigh > 0 && (
+                      <div style={{ width: `${percentHigh}%` }} className="bg-rose-600 h-full" title={`Выше нормы: ${percentHigh}%`} />
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
+                    <span className="text-amber-600 dark:text-amber-400">Гипо {percentLow}%</span>
+                    <span className="text-rose-600 dark:text-rose-400">Гипер {percentHigh}%</span>
+                  </div>
+                </div>
+              ) : (
+                <span className="text-[11px] text-slate-400 mt-1 block">нет данных</span>
+              )}
+            </div>
+          </div>
+
+          {/* Card 3: Оценочный eHbA1c */}
+          <div className="p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-850/60 flex flex-col justify-between space-y-2 shadow-2xs">
+            <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+              <span className="font-semibold">Расчетный eHbA1c</span>
+              <div className="w-6 h-6 rounded-lg bg-sky-500/10 text-sky-600 dark:text-sky-400 flex items-center justify-center">
+                <Target className="w-3.5 h-3.5" />
+              </div>
+            </div>
+
+            <div>
+              <div className="flex items-baseline gap-1">
+                <span className="font-mono text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white tabular-nums">
+                  {estimatedHbA1c !== null ? `~${estimatedHbA1c}%` : '—'}
+                </span>
+              </div>
+              <span className="text-[10px] text-slate-400 mt-1 block leading-tight">
+                Ориентировочно (GMI) • не заменяет лабораторию
+              </span>
+            </div>
+          </div>
+
+          {/* Card 4: Инсулинотерапия с учетом полных дней */}
+          <div className="p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-850/60 flex flex-col justify-between space-y-2 shadow-2xs">
+            <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+              <span className="font-semibold">Инсулин / сутки</span>
+              <div className="w-6 h-6 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                <Syringe className="w-3.5 h-3.5" />
+              </div>
+            </div>
+
+            <div>
+              <div className="flex flex-col gap-0.5">
+                <div className="flex items-baseline justify-between text-xs font-mono">
+                  <span className="text-blue-700 dark:text-blue-400 font-semibold">{bolusName}:</span>
+                  <span className="font-bold text-slate-900 dark:text-white tabular-nums">
+                    {stats.avgDailyRinFast > 0 ? `${stats.avgDailyRinFast} ед` : '—'}
                   </span>
+                </div>
+                <div className="flex items-baseline justify-between text-xs font-mono">
+                  <span className="text-purple-700 dark:text-purple-400 font-semibold">{basalName}:</span>
+                  <span className="font-bold text-slate-900 dark:text-white tabular-nums">
+                    {stats.avgDailyTresiba > 0 ? `${stats.avgDailyTresiba} ед` : '—'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="mt-1 pt-1 border-t border-slate-200 dark:border-slate-700/60 text-[10px] text-slate-400">
+                {stats.fullDaysCount && stats.fullDaysCount > 0 ? (
+                  <span className="text-teal-700 dark:text-teal-300 font-medium">
+                    Учет полных дней: {stats.fullDaysCount} дн.
+                  </span>
+                ) : (
+                  <span>Болюс и базал</span>
                 )}
               </div>
-            )}
-
-            {stats.totalEntries > 0 && (
-              <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs font-semibold shadow-xs">
-                <Award className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                <span>В целевом диапазоне:</span>
-                <strong className="font-mono text-sm tabular-nums">{percentNormal}%</strong>
-              </div>
-            )}
-
-            {estimatedHbA1c !== null && (
-              <div
-                className="hidden md:flex items-center gap-1 px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 text-xs text-slate-600 dark:text-slate-400 shadow-xs"
-                title="Ориентировочный расчет eHbA1c (не заменяет лабораторный анализ)"
-              >
-                <span>eHbA1c:</span>
-                <strong className="font-mono text-slate-900 dark:text-slate-100 tabular-nums">~{estimatedHbA1c}%</strong>
-              </div>
-            )}
+            </div>
           </div>
 
         </div>
-
-        {/* Нижняя полоса: Пропорция измерений + суточные дозы инсулинов */}
-        {entries.length > 0 && stats.totalEntries > 0 && (
-          <div className="pt-2 border-t border-slate-200/70 dark:border-slate-800 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 text-xs">
-            
-            {/* Доля измерений в диапазоне со шкалой */}
-            <div className="flex-1 min-w-[240px] flex items-center gap-3">
-              <span className="text-xs text-slate-500 dark:text-slate-400 font-medium shrink-0">
-                Доля в целевом диапазоне:
-              </span>
-              
-              <div className="flex-1 h-2 rounded-full overflow-hidden bg-slate-200 dark:bg-slate-800 flex">
-                {percentLow > 0 && (
-                  <div
-                    style={{ width: `${percentLow}%` }}
-                    className="bg-amber-500 h-full transition-all"
-                    title={`Ниже цели (<3.9): ${percentLow}%`}
-                  />
-                )}
-                {percentNormal > 0 && (
-                  <div
-                    style={{ width: `${percentNormal}%` }}
-                    className="bg-emerald-600 h-full transition-all"
-                    title={`В норме (4.0–9.9): ${percentNormal}%`}
-                  />
-                )}
-                {percentHigh > 0 && (
-                  <div
-                    style={{ width: `${percentHigh}%` }}
-                    className="bg-rose-600 h-full transition-all"
-                    title={`Выше цели (>=10.0): ${percentHigh}%`}
-                  />
-                )}
-              </div>
-
-              {/* Легенда */}
-              <div className="flex items-center gap-2.5 font-mono text-xs shrink-0 tabular-nums">
-                <span className="text-emerald-700 dark:text-emerald-400 font-bold flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-emerald-600" />
-                  {percentNormal}%
-                </span>
-                <span className="text-amber-700 dark:text-amber-400 font-medium flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-amber-500" />
-                  {percentLow}%
-                </span>
-                <span className="text-rose-700 dark:text-rose-400 font-medium flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-rose-600" />
-                  {percentHigh}%
-                </span>
-              </div>
-            </div>
-
-            {/* Суточные дозы инсулинов: учет полных дней */}
-            <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 text-slate-600 dark:text-slate-400 text-xs shrink-0">
-              {stats.avgDailyRinFast > 0 && (
-                <div
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200/70 dark:border-blue-900/50 text-blue-900 dark:text-blue-300"
-                  title={
-                    stats.fullDaysCount && stats.fullDaysCount > 0
-                      ? `Рассчитано по ${stats.fullDaysCount} полным дням, где были указаны утро, день, вечер и ночь`
-                      : 'Среднесуточный болюс'
-                  }
-                >
-                  <Syringe className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                  <span>{bolusName}:</span>
-                  <strong className="font-mono text-blue-950 dark:text-blue-100 tabular-nums">
-                    {stats.avgDailyRinFast} ед/сут
-                  </strong>
-                  {stats.fullDaysCount && stats.fullDaysCount > 0 ? (
-                    <span className="text-[10px] px-1 py-0.2 rounded bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200 font-semibold font-mono">
-                      {stats.fullDaysCount} дн. (полн.)
-                    </span>
-                  ) : null}
-                </div>
-              )}
-
-              {stats.avgDailyTresiba > 0 && (
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-50/60 dark:bg-purple-950/30 border border-purple-200/70 dark:border-purple-900/50 text-purple-900 dark:text-purple-300">
-                  <span className="w-1.5 h-1.5 rounded-full bg-purple-600" />
-                  <span>{basalName}:</span>
-                  <strong className="font-mono text-purple-950 dark:text-purple-100 tabular-nums">
-                    {stats.avgDailyTresiba} ед/сут
-                  </strong>
-                </div>
-              )}
-            </div>
-
-          </div>
-        )}
 
       </div>
     </section>

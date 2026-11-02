@@ -252,8 +252,8 @@ export const EntryModal: React.FC<EntryModalProps> = ({
             </div>
           </div>
 
-          {/* Глюкоза */}
-          <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-2">
+          {/* Глюкоза - Hero Input */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-2.5 shadow-2xs">
             <div className="flex items-center justify-between gap-2">
               <label htmlFor="entry-glucose" className="text-xs font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                 <Activity className="w-4 h-4 text-teal-600" />
@@ -261,7 +261,7 @@ export const EntryModal: React.FC<EntryModalProps> = ({
               </label>
 
               {glucoseEval && (
-                <div className={`px-2 py-0.5 rounded text-xs font-semibold border ${glucoseEval.badgeClass} flex items-center gap-1`}>
+                <div className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border ${glucoseEval.badgeClass} flex items-center gap-1 shadow-2xs`}>
                   <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0" />
                   <span>{glucoseEval.shortLabel}</span>
                 </div>
@@ -276,35 +276,35 @@ export const EntryModal: React.FC<EntryModalProps> = ({
                 step="0.1"
                 min="0"
                 max="45"
-                placeholder="Например: 5.8"
+                placeholder="5.8"
                 value={glucoseStr}
                 onChange={(e) => setGlucoseStr(e.target.value)}
-                className="w-full h-12 px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-mono text-xl font-bold focus:outline-none focus:ring-2 focus:ring-teal-500"
+                className="w-full h-14 pl-4 pr-20 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-mono text-2xl font-extrabold focus:outline-none focus:ring-2 focus:ring-teal-500 tabular-nums shadow-xs"
               />
-              <span className="absolute right-4 top-3.5 text-xs text-slate-400 font-mono pointer-events-none">
+              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-mono pointer-events-none font-semibold">
                 ммоль/л
               </span>
             </div>
 
             {glucoseEval ? (
-              <p className={`text-xs ${glucoseEval.textClass} flex items-center gap-1 font-medium`}>
+              <p className={`text-xs ${glucoseEval.textClass} flex items-center gap-1.5 font-medium`}>
                 <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                {glucoseEval.description}
+                <span>{glucoseEval.description}</span>
               </p>
             ) : (
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
                 Целевой диапазон нормы: 4.0 – 9.9 ммоль/л. Значения ниже 3.9 ммоль/л считаются гипогликемией.
               </p>
             )}
           </div>
 
-          {/* Инсулины: РинФаст и Тресиба с исправленными подписями кнопок */}
+          {/* Инсулины: РинФаст и Тресиба с интерактивными чипами */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             
             {/* Болюс */}
-            <div className="p-3.5 rounded-xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/80 dark:border-blue-900/60 space-y-2">
-              <label htmlFor="entry-rinfast" className="block text-xs font-semibold text-blue-900 dark:text-blue-300 flex items-center gap-1.5">
-                <Syringe className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+            <div className="p-4 rounded-2xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/80 dark:border-blue-900/60 space-y-2.5 shadow-2xs">
+              <label htmlFor="entry-rinfast" className="block text-xs font-semibold text-blue-950 dark:text-blue-300 flex items-center gap-1.5">
+                <Syringe className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                 {bolusName} (болюс на еду/ДПС)
               </label>
 
@@ -318,36 +318,43 @@ export const EntryModal: React.FC<EntryModalProps> = ({
                   placeholder="0"
                   value={rinFastStr}
                   onChange={(e) => setRinFastStr(e.target.value)}
-                  className="w-full h-11 px-3 py-2 rounded-lg border border-blue-300 dark:border-blue-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-mono font-bold text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full h-11 pl-3 pr-12 py-2 rounded-xl border border-blue-300 dark:border-blue-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-mono font-bold text-lg focus:outline-none focus:ring-2 focus:ring-blue-500 tabular-nums shadow-xs"
                 />
-                <span className="absolute right-3.5 top-3 text-xs font-mono font-bold text-blue-700 dark:text-blue-300 pointer-events-none">
+                <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-mono font-bold text-blue-700 dark:text-blue-300 pointer-events-none">
                   ЕД
                 </span>
               </div>
 
-              {/* Пресеты доз — теперь четко подписаны как значение, а не инкремент */}
+              {/* Пресеты доз — интерактивные чипы */}
               <div className="space-y-1">
                 <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Быстрый выбор дозы:</span>
                 <div className="flex gap-1">
-                  {[2, 4, 6, 8, 10].map((num) => (
-                    <button
-                      key={num}
-                      type="button"
-                      onClick={() => setRinFastStr(String(num))}
-                      className="flex-1 py-1.5 text-xs font-mono font-semibold bg-white dark:bg-slate-800 text-blue-700 dark:text-blue-300 rounded border border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition cursor-pointer min-h-[34px]"
-                      title={`Установить дозу ${num} ед`}
-                    >
-                      {num} ед
-                    </button>
-                  ))}
+                  {[2, 4, 6, 8, 10].map((num) => {
+                    const isActive = rinFastStr === String(num);
+                    return (
+                      <button
+                        key={num}
+                        type="button"
+                        onClick={() => setRinFastStr(String(num))}
+                        className={`flex-1 py-1.5 text-xs font-mono font-semibold rounded-lg border transition-all cursor-pointer min-h-[34px] ${
+                          isActive
+                            ? 'bg-blue-600 text-white border-blue-600 font-bold shadow-xs'
+                            : 'bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-950/40'
+                        }`}
+                        title={`Установить дозу ${num} ед`}
+                      >
+                        {num} ед
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </div>
 
             {/* Базал */}
-            <div className="p-3.5 rounded-xl bg-purple-50/50 dark:bg-purple-950/20 border border-purple-200/80 dark:border-purple-900/60 space-y-2">
-              <label htmlFor="entry-tresiba" className="block text-xs font-semibold text-purple-900 dark:text-purple-300 flex items-center gap-1.5">
-                <Moon className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+            <div className="p-4 rounded-2xl bg-purple-50/50 dark:bg-purple-950/20 border border-purple-200/80 dark:border-purple-900/60 space-y-2.5 shadow-2xs">
+              <label htmlFor="entry-tresiba" className="block text-xs font-semibold text-purple-950 dark:text-purple-300 flex items-center gap-1.5">
+                <Moon className="w-4 h-4 text-purple-600 dark:text-purple-400" />
                 {basalName} (базальный на ночь)
               </label>
 
@@ -361,28 +368,35 @@ export const EntryModal: React.FC<EntryModalProps> = ({
                   placeholder="0"
                   value={tresibaStr}
                   onChange={(e) => setTresibaStr(e.target.value)}
-                  className="w-full h-11 px-3 py-2 rounded-lg border border-purple-300 dark:border-purple-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-mono font-bold text-base focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  className="w-full h-11 pl-3 pr-12 py-2 rounded-xl border border-purple-300 dark:border-purple-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-mono font-bold text-lg focus:outline-none focus:ring-2 focus:ring-purple-500 tabular-nums shadow-xs"
                 />
-                <span className="absolute right-3.5 top-3 text-xs font-mono font-bold text-purple-700 dark:text-purple-300 pointer-events-none">
+                <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-mono font-bold text-purple-700 dark:text-purple-300 pointer-events-none">
                   ЕД
                 </span>
               </div>
 
-              {/* Пресеты доз — теперь четко подписаны как значение, а не инкремент */}
+              {/* Пресеты доз — интерактивные чипы */}
               <div className="space-y-1">
                 <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Быстрый выбор дозы:</span>
                 <div className="flex gap-1">
-                  {[12, 14, 16, 18, 20].map((num) => (
-                    <button
-                      key={num}
-                      type="button"
-                      onClick={() => setTresibaStr(String(num))}
-                      className="flex-1 py-1.5 text-xs font-mono font-semibold bg-white dark:bg-slate-800 text-purple-700 dark:text-purple-300 rounded border border-purple-200 dark:border-purple-800 hover:bg-purple-50 dark:hover:bg-purple-950/40 transition cursor-pointer min-h-[34px]"
-                      title={`Установить дозу ${num} ед`}
-                    >
-                      {num} ед
-                    </button>
-                  ))}
+                  {[12, 14, 16, 18, 20].map((num) => {
+                    const isActive = tresibaStr === String(num);
+                    return (
+                      <button
+                        key={num}
+                        type="button"
+                        onClick={() => setTresibaStr(String(num))}
+                        className={`flex-1 py-1.5 text-xs font-mono font-semibold rounded-lg border transition-all cursor-pointer min-h-[34px] ${
+                          isActive
+                            ? 'bg-purple-600 text-white border-purple-600 font-bold shadow-xs'
+                            : 'bg-white dark:bg-slate-900 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800 hover:bg-purple-50 dark:hover:bg-purple-950/40'
+                        }`}
+                        title={`Установить дозу ${num} ед`}
+                      >
+                        {num} ед
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </div>
