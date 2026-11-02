@@ -19,6 +19,7 @@ interface SettingsModalProps {
   onUpdateSettings: (settings: UserSettings) => void;
   entries: DiaryEntry[];
   onImportData: (imported: DiaryEntry[]) => void;
+  onOpenExcelImport: () => void;
   onResetToSample: () => void;
   onClearAll: () => void;
 }
@@ -30,6 +31,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onUpdateSettings,
   entries,
   onImportData,
+  onOpenExcelImport,
   onResetToSample,
   onClearAll,
 }) => {
@@ -160,24 +162,35 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* Резервное копирование и синхронизация */}
           <div className="space-y-3 pt-3 border-t border-slate-200 dark:border-slate-800">
             <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              Резервная копия (Бэкап)
+              Резервная копия и импорт данных
             </h4>
             <p className="text-slate-500">
-              Все записи сохраняются в локальном хранилище вашего устройства (LocalStorage). Вы можете выгрузить файл бэкапа и перенести на другое устройство или восстановить данные в любой момент.
+              Все записи сохраняются в защищенной базе данных на сервере и дублируются ежедневным бэкапом. Вы также можете вручную выгрузить копию или загрузить записи из таблицы Excel.
             </p>
 
             <div className="flex flex-wrap gap-2.5">
               <button
+                onClick={() => {
+                  onClose();
+                  onOpenExcelImport();
+                }}
+                className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center gap-2 shadow-xs transition cursor-pointer"
+              >
+                <Upload className="w-4 h-4" />
+                Импорт из Excel (.xlsx)
+              </button>
+
+              <button
                 onClick={handleExportJSON}
-                className="px-4 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold flex items-center gap-2 shadow-xs transition"
+                className="px-4 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold flex items-center gap-2 shadow-xs transition cursor-pointer"
               >
                 <Download className="w-4 h-4" />
-                Экспорт данных (JSON)
+                Экспорт в JSON
               </button>
 
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold flex items-center gap-2 transition"
+                className="px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold flex items-center gap-2 transition cursor-pointer"
               >
                 <Upload className="w-4 h-4" />
                 Импорт из JSON

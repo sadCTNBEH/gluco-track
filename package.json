@@ -5,19 +5,25 @@
   "type": "module",
   "scripts": {
     "dev": "vite --port=4999 --host=0.0.0.0",
+    "dev:server": "tsx watch server/index.ts",
     "build": "vite build",
-    "preview": "vite preview --port=4999 --host=0.0.0.0",
+    "start": "node server/index.js",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
     "test": "tsx --test src/utils/diabetes.test.ts"
   },
   "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^4.21.2",
     "lucide-react": "^0.546.0",
     "react": "^19.0.1",
-    "react-dom": "^19.0.1"
+    "react-dom": "^19.0.1",
+    "read-excel-file": "^9.3.14"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",

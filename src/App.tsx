@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { DiaryEntry, UserSettings } from './types/diabetes';
-import { DEFAULT_SETTINGS, calculateMonthlyStats, evaluateGlucose } from './utils/diabetes';
+import { DEFAULT_SETTINGS, calculateMonthlyStats } from './utils/diabetes';
 import { generateSampleData } from './data/sampleData';
 import { Header, ActiveTab, ViewMode } from './components/Header';
 import { DiaryTable } from './components/DiaryTable';
@@ -14,82 +14,151 @@ import { MonthlyCharts } from './components/MonthlyCharts';
 import { DoctorReportPdf } from './components/DoctorReportPdf';
 import { EntryModal } from './components/EntryModal';
 import { SettingsModal } from './components/SettingsModal';
-import { Plus, HeartPulse, ShieldCheck, Activity, Award } from 'lucide-react';
+import { AuthScreen } from './components/AuthScreen';
+import { ExcelImportModal } from './components/ExcelImportModal';
+import { api, AuthUser } from './api/client';
+import { Plus, Award, Loader2 } from 'lucide-react';
 
 const STORAGE_KEY_ENTRIES = 'diabetes_diary_entries_v1';
 const STORAGE_KEY_SETTINGS = 'diabetes_diary_settings_v1';
 
 export default function App() {
-  const [entries, setEntries] = useState<DiaryEntry[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_ENTRIES);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
-        }
-      }
-    } catch (e) {
-      console.error('Failed to load diary entries from localStorage', e);
-    }
-    // Если пусто — инициализируем реалистичными демонстрационными данными
-    return generateSampleData();
-  });
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [authChecking, setAuthChecking] = useState(true);
 
-  const [settings, setSettings] = useState<UserSettings>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_SETTINGS);
-      if (saved) {
-        return { ...DEFAULT_SETTINGS, ...JSON.parse(saved) };
-      }
-    } catch (e) {
-      console.error('Failed to load settings', e);
-    }
-    return DEFAULT_SETTINGS;
-  });
+  const [entries, setEntries] = useState<DiaryEntry[]>([]);
+  const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
+  const [loadingData, setLoadingData] = useState(false);
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('table');
   const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [isEntryModalOpen, setIsEntryModalOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<DiaryEntry | null>(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
 
-  // Сохранение в LocalStorage
-  useEffect(() => {
+  // Загрузка данных пользователя с сервера
+  const loadUserData = useCallback(async () => {
+    setLoadingData(true);
     try {
+      const [serverEntries, serverSettings] = await Promise.all([
+        api.getEntries(),
+        api.getSettings(),
+      ]);
+
+      if (serverSettings) {
+        setSettings({ ...DEFAULT_SETTINGS, ...serverSettings });
+      }
+
+      if (Array.isArray(serverEntries) && serverEntries.length > 0) {
+        setEntries(serverEntries);
+      } else {
+        // Если база пустая, проверяем локальный кэш или оставляем пустой
+        const localSaved = localStorage.getItem(STORAGE_KEY_ENTRIES);
+        if (localSaved) {
+          try {
+            const parsed = JSON.parse(localSaved);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setEntries(parsed);
+              // Синхронизируем локальные данные на сервер
+              await api.importEntries(parsed, false).catch(() => {});
+            }
+          } catch {
+            setEntries([]);
+          }
+        } else {
+          setEntries([]);
+        }
+      }
+    } catch (err) {
+      console.error('Ошибка загрузки данных с сервера:', err);
+      // Fallback на LocalStorage в случае сетевого сбоя
+      const saved = localStorage.getItem(STORAGE_KEY_ENTRIES);
+      if (saved) {
+        try {
+          setEntries(JSON.parse(saved));
+        } catch {
+          setEntries([]);
+        }
+      }
+    } finally {
+      setLoadingData(false);
+    }
+  }, []);
+
+  // Первоначальная проверка авторизации
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        const res = await api.getMe();
+        if (isMounted) {
+          if (res?.user) {
+            setUser(res.user);
+            await loadUserData();
+          } else {
+            setUser(null);
+          }
+        }
+      } catch {
+        if (isMounted) setUser(null);
+      } finally {
+        if (isMounted) setAuthChecking(false);
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, [loadUserData]);
+
+  // Кэширование в LocalStorage для оффлайн-доступа
+  useEffect(() => {
+    if (user && entries.length > 0) {
       localStorage.setItem(STORAGE_KEY_ENTRIES, JSON.stringify(entries));
-    } catch (e) {
-      console.error('Failed to save entries to localStorage', e);
     }
-  }, [entries]);
+  }, [entries, user]);
 
   useEffect(() => {
-    try {
+    if (user) {
       localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(settings));
-    } catch (e) {
-      console.error('Failed to save settings to localStorage', e);
     }
-  }, [settings]);
+  }, [settings, user]);
 
   // Добавление или сохранение записи
-  const handleSaveEntry = (data: Omit<DiaryEntry, 'id' | 'createdAt'> & { id?: string }) => {
+  const handleSaveEntry = async (data: Omit<DiaryEntry, 'id' | 'createdAt'> & { id?: string }) => {
     if (data.id) {
       // Обновление существующей записи
+      const updatedItem = {
+        ...data,
+        id: data.id,
+      };
       setEntries((prev) =>
-        prev.map((item) =>
-          item.id === data.id
-            ? { ...item, ...data, id: data.id }
-            : item
-        )
+        prev.map((item) => (item.id === data.id ? { ...item, ...updatedItem } : item))
       );
+      try {
+        await api.updateEntry(data.id, data);
+      } catch (err) {
+        console.error('Ошибка сохранения на сервер:', err);
+      }
     } else {
       // Создание новой записи
+      const tempId = `entry-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
       const newEntry: DiaryEntry = {
         ...data,
-        id: `entry-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        id: tempId,
         createdAt: Date.now(),
       };
       setEntries((prev) => [newEntry, ...prev]);
+      try {
+        const saved = await api.createEntry(newEntry);
+        if (saved?.id) {
+          setEntries((prev) =>
+            prev.map((item) => (item.id === tempId ? { ...item, id: saved.id } : item))
+          );
+        }
+      } catch (err) {
+        console.error('Ошибка отправки записи на сервер:', err);
+      }
     }
   };
 
@@ -98,20 +167,87 @@ export default function App() {
     setIsEntryModalOpen(true);
   };
 
-  const handleDeleteEntry = (id: string) => {
+  const handleDeleteEntry = async (id: string) => {
     setEntries((prev) => prev.filter((e) => e.id !== id));
+    try {
+      await api.deleteEntry(id);
+    } catch (err) {
+      console.error('Ошибка удаления записи на сервере:', err);
+    }
   };
 
-  const handleResetToSample = () => {
+  const handleResetToSample = async () => {
     const samples = generateSampleData();
     setEntries(samples);
+    try {
+      await api.importEntries(samples, true);
+    } catch (err) {
+      console.error('Ошибка загрузки демо-данных на сервер:', err);
+    }
   };
 
-  const handleClearAll = () => {
+  const handleClearAll = async () => {
     setEntries([]);
+    localStorage.removeItem(STORAGE_KEY_ENTRIES);
+    try {
+      await api.clearEntries();
+    } catch (err) {
+      console.error('Ошибка очистки на сервере:', err);
+    }
   };
 
-  // Метрики последних 7 дней для быстрой полосы статуса
+  const handleUpdateSettings = async (newSettings: UserSettings) => {
+    setSettings(newSettings);
+    try {
+      await api.updateSettings(newSettings);
+    } catch (err) {
+      console.error('Ошибка обновления настроек на сервере:', err);
+    }
+  };
+
+  // Импорт из файла Excel
+  const handleExcelImport = async (importedEntries: DiaryEntry[], replaceAll: boolean) => {
+    if (replaceAll) {
+      setEntries(importedEntries);
+    } else {
+      setEntries((prev) => [...importedEntries, ...prev]);
+    }
+    await api.importEntries(importedEntries, replaceAll);
+  };
+
+  // Выход из системы
+  const handleLogout = async () => {
+    if (confirm('Выйти из дневника?')) {
+      await api.logout();
+      setUser(null);
+      setEntries([]);
+      localStorage.removeItem(STORAGE_KEY_ENTRIES);
+    }
+  };
+
+  // Индикатор начальной проверки
+  if (authChecking) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white gap-3">
+        <Loader2 className="w-8 h-8 text-teal-500 animate-spin" />
+        <p className="text-xs text-slate-400">Загрузка дневника...</p>
+      </div>
+    );
+  }
+
+  // Если не авторизован — показываем экран логина / регистрации
+  if (!user) {
+    return (
+      <AuthScreen
+        onSuccess={(authData) => {
+          setUser(authData.user);
+          loadUserData();
+        }}
+      />
+    );
+  }
+
+  // Метрики месяца для плашки статуса
   const recentStats = calculateMonthlyStats(entries);
 
   return (
@@ -127,16 +263,19 @@ export default function App() {
           setIsEntryModalOpen(true);
         }}
         onSettingsClick={() => setIsSettingsModalOpen(true)}
+        onExcelImportClick={() => setIsExcelModalOpen(true)}
+        onLogout={handleLogout}
+        username={user.username}
         entriesCount={entries.length}
       />
 
-      {/* Быстрая информационная плашка состояния (скрывается при печати) */}
+      {/* Быстрая информационная плашка состояния */}
       <div className="print:hidden bg-white/80 dark:bg-slate-900/80 border-b border-slate-200/80 dark:border-slate-800/80 py-2.5 px-4 sm:px-6">
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-300">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Пациент: <strong>{settings.patientName}</strong></span>
+              <span>Пациент: <strong>{settings.patientName || user.username}</strong></span>
             </div>
             <span className="text-slate-300 dark:text-slate-700">|</span>
             <div className="hidden sm:flex items-center gap-1.5 text-slate-500">
@@ -151,7 +290,7 @@ export default function App() {
           <div className="flex items-center gap-3">
             {recentStats.avgGlucose !== null && (
               <div className="flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium">
-                <span>Ср. сахар месяца:</span>
+                <span>Ср. сахар:</span>
                 <strong className="text-teal-600 dark:text-teal-400 font-mono">
                   {recentStats.avgGlucose} ммоль/л
                 </strong>
@@ -167,56 +306,64 @@ export default function App() {
 
       {/* Основной контент */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
-        {activeTab === 'table' && (
+        {loadingData && entries.length === 0 ? (
+          <div className="p-12 text-center text-slate-400 text-sm flex items-center justify-center gap-2">
+            <Loader2 className="w-5 h-5 animate-spin text-teal-600" />
+            <span>Загрузка данных из базы...</span>
+          </div>
+        ) : (
           <>
-            {/* На десктопе всегда таблица. На мобильном - выбор между карточками и компактной таблицей */}
-            <div className="hidden md:block">
-              <DiaryTable
+            {activeTab === 'table' && (
+              <>
+                <div className="hidden md:block">
+                  <DiaryTable
+                    entries={entries}
+                    onAddClick={() => {
+                      setEditingEntry(null);
+                      setIsEntryModalOpen(true);
+                    }}
+                    onEditClick={handleEditEntry}
+                    onDeleteClick={handleDeleteEntry}
+                  />
+                </div>
+                <div className="md:hidden">
+                  {viewMode === 'cards' ? (
+                    <MobileCardView
+                      entries={entries}
+                      onAddClick={() => {
+                        setEditingEntry(null);
+                        setIsEntryModalOpen(true);
+                      }}
+                      onEditClick={handleEditEntry}
+                      onDeleteClick={handleDeleteEntry}
+                    />
+                  ) : (
+                    <DiaryTable
+                      entries={entries}
+                      onAddClick={() => {
+                        setEditingEntry(null);
+                        setIsEntryModalOpen(true);
+                      }}
+                      onEditClick={handleEditEntry}
+                      onDeleteClick={handleDeleteEntry}
+                    />
+                  )}
+                </div>
+              </>
+            )}
+
+            {activeTab === 'charts' && (
+              <MonthlyCharts entries={entries} />
+            )}
+
+            {activeTab === 'report' && (
+              <DoctorReportPdf
                 entries={entries}
-                onAddClick={() => {
-                  setEditingEntry(null);
-                  setIsEntryModalOpen(true);
-                }}
-                onEditClick={handleEditEntry}
-                onDeleteClick={handleDeleteEntry}
+                settings={settings}
+                onUpdateSettings={handleUpdateSettings}
               />
-            </div>
-            <div className="md:hidden">
-              {viewMode === 'cards' ? (
-                <MobileCardView
-                  entries={entries}
-                  onAddClick={() => {
-                    setEditingEntry(null);
-                    setIsEntryModalOpen(true);
-                  }}
-                  onEditClick={handleEditEntry}
-                  onDeleteClick={handleDeleteEntry}
-                />
-              ) : (
-                <DiaryTable
-                  entries={entries}
-                  onAddClick={() => {
-                    setEditingEntry(null);
-                    setIsEntryModalOpen(true);
-                  }}
-                  onEditClick={handleEditEntry}
-                  onDeleteClick={handleDeleteEntry}
-                />
-              )}
-            </div>
+            )}
           </>
-        )}
-
-        {activeTab === 'charts' && (
-          <MonthlyCharts entries={entries} />
-        )}
-
-        {activeTab === 'report' && (
-          <DoctorReportPdf
-            entries={entries}
-            settings={settings}
-            onUpdateSettings={setSettings}
-          />
         )}
       </main>
 
@@ -226,7 +373,7 @@ export default function App() {
           setEditingEntry(null);
           setIsEntryModalOpen(true);
         }}
-        className="print:hidden md:hidden fixed right-5 bottom-6 z-40 w-14 h-14 rounded-full bg-teal-600 active:bg-teal-700 text-white shadow-xl shadow-teal-600/40 flex items-center justify-center transition-transform active:scale-95"
+        className="print:hidden md:hidden fixed right-5 bottom-6 z-40 w-14 h-14 rounded-full bg-teal-600 active:bg-teal-700 text-white shadow-xl shadow-teal-600/40 flex items-center justify-center transition-transform active:scale-95 cursor-pointer"
         aria-label="Быстро добавить замер"
       >
         <Plus className="w-7 h-7" />
@@ -249,11 +396,23 @@ export default function App() {
         isOpen={isSettingsModalOpen}
         onClose={() => setIsSettingsModalOpen(false)}
         settings={settings}
-        onUpdateSettings={setSettings}
+        onUpdateSettings={handleUpdateSettings}
         entries={entries}
-        onImportData={setEntries}
+        onImportData={async (imported) => {
+          setEntries(imported);
+          await api.importEntries(imported, false);
+        }}
+        onOpenExcelImport={() => setIsExcelModalOpen(true)}
         onResetToSample={handleResetToSample}
         onClearAll={handleClearAll}
+      />
+
+      {/* Модальное окно импорта из Excel */}
+      <ExcelImportModal
+        isOpen={isExcelModalOpen}
+        onClose={() => setIsExcelModalOpen(false)}
+        onImport={handleExcelImport}
+        xeRatio={settings.xeRatio}
       />
     </div>
   );

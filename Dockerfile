@@ -1,27 +1,34 @@
-# Этап 1: Сборка приложения
+# Этап 1: Сборка фронтенда
 FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Копируем описание зависимостей и устанавливаем их
-COPY package.json ./
-RUN npm install
+COPY package*.json ./
+RUN npm ci
 
-# Копируем исходный код и собираем продакшен-бандл
 COPY . .
 RUN npm run build
 
-# Этап 2: Раздача статики через Nginx на порту 4999
-FROM nginx:alpine
+# Этап 2: Финальный образ для запуска приложения на порту 4999
+FROM node:22-alpine
 
-# Копируем собранный проект
-COPY --from=builder /app/dist /usr/share/nginx/html
+WORKDIR /app
 
-# Копируем конфигурацию Nginx
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+ENV NODE_ENV=production
+ENV PORT=4999
+ENV DATA_DIR=/app/data
 
-# Открываем порт 4999
+# Установка только production-зависимостей
+COPY package*.json ./
+RUN npm ci --omit=dev
+
+# Копируем серверную часть и собранный бандл фронтенда
+COPY server/ ./server/
+COPY --from=builder /app/dist ./dist
+
+# Директория для SQLite базы данных
+RUN mkdir -p /app/data
+
 EXPOSE 4999
 
-# Запуск Nginx
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["node", "server/index.js"]

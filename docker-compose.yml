@@ -6,12 +6,17 @@ services:
     container_name: glucotrack-app
     restart: unless-stopped
     ports:
-      # Проброс на локальный порт хоста 4999 (для проксирования через хостовой Nginx)
+      # Проброс на локальный порт 4999 хоста для обратного прокси Nginx
       - "127.0.0.1:4999:4999"
+    volumes:
+      # База данных сохраняется вне контейнера в папке ./data на сервере
+      - ./data:/app/data
     environment:
       - NODE_ENV=production
+      - PORT=4999
+      - DATA_DIR=/app/data
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:4999/"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4999/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 3

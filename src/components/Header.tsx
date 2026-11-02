@@ -8,6 +8,9 @@ import {
   Plus,
   LayoutGrid,
   List,
+  FileSpreadsheet,
+  LogOut,
+  User,
 } from 'lucide-react';
 
 export type ActiveTab = 'table' | 'charts' | 'report';
@@ -20,6 +23,9 @@ interface HeaderProps {
   onViewModeChange: (mode: ViewMode) => void;
   onAddClick: () => void;
   onSettingsClick: () => void;
+  onExcelImportClick: () => void;
+  onLogout?: () => void;
+  username?: string;
   entriesCount: number;
 }
 
@@ -30,6 +36,9 @@ export const Header: React.FC<HeaderProps> = ({
   onViewModeChange,
   onAddClick,
   onSettingsClick,
+  onExcelImportClick,
+  onLogout,
+  username,
   entriesCount,
 }) => {
   return (
@@ -59,7 +68,7 @@ export const Header: React.FC<HeaderProps> = ({
           <nav className="hidden md:flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl">
             <button
               onClick={() => onTabChange('table')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2 ${
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
                 activeTab === 'table'
                   ? 'bg-white dark:bg-slate-700 text-teal-700 dark:text-teal-300 shadow-xs'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -71,7 +80,7 @@ export const Header: React.FC<HeaderProps> = ({
 
             <button
               onClick={() => onTabChange('charts')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2 ${
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
                 activeTab === 'charts'
                   ? 'bg-white dark:bg-slate-700 text-teal-700 dark:text-teal-300 shadow-xs'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -83,7 +92,7 @@ export const Header: React.FC<HeaderProps> = ({
 
             <button
               onClick={() => onTabChange('report')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2 ${
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
                 activeTab === 'report'
                   ? 'bg-white dark:bg-slate-700 text-teal-700 dark:text-teal-300 shadow-xs'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -97,7 +106,7 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Right Actions */}
           <div className="flex items-center gap-2">
             
-            {/* Переключатель вида (Карточки / Таблица) при просмотре дневника */}
+            {/* Переключатель вида (Карточки / Таблица) */}
             {activeTab === 'table' && (
               <div className="flex md:hidden items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl text-xs">
                 <button
@@ -125,20 +134,50 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
             )}
 
+            {/* Импорт из Excel */}
+            <button
+              onClick={onExcelImportClick}
+              className="hidden sm:flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20 transition cursor-pointer"
+              title="Импорт записей из файла .xlsx"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              <span>Импорт Excel</span>
+            </button>
+
             {/* Настройки */}
             <button
               onClick={onSettingsClick}
-              className="p-2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-              title="Настройки и бэкап"
+              className="p-2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+              title="Настройки"
               aria-label="Настройки"
             >
               <Settings className="w-5 h-5" />
             </button>
 
+            {/* Пользователь и Выход */}
+            {username && (
+              <div className="flex items-center gap-1 pl-1 border-l border-slate-200 dark:border-slate-800">
+                <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  <User className="w-3.5 h-3.5 text-teal-600" />
+                  <span className="max-w-[100px] truncate">{username}</span>
+                </div>
+                {onLogout && (
+                  <button
+                    onClick={onLogout}
+                    className="p-2 text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition cursor-pointer"
+                    title="Выйти из аккаунта"
+                    aria-label="Выйти"
+                  >
+                    <LogOut className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            )}
+
             {/* Главная кнопка Добавить */}
             <button
               onClick={onAddClick}
-              className="px-3.5 sm:px-4 py-2 bg-teal-600 hover:bg-teal-500 active:bg-teal-700 text-white font-bold text-xs rounded-xl shadow-md shadow-teal-600/20 flex items-center gap-1.5 transition"
+              className="px-3.5 sm:px-4 py-2 bg-teal-600 hover:bg-teal-500 active:bg-teal-700 text-white font-bold text-xs rounded-xl shadow-md shadow-teal-600/20 flex items-center gap-1.5 transition cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span className="hidden sm:inline">Добавить замер</span>
@@ -148,7 +187,7 @@ export const Header: React.FC<HeaderProps> = ({
 
         </div>
 
-        {/* Мобильная нижняя навигация (когда экран узкий) */}
+        {/* Мобильная нижняя навигация */}
         <div className="md:hidden flex items-center justify-around py-2 border-t border-slate-100 dark:border-slate-800 text-xs">
           <button
             onClick={() => onTabChange('table')}
@@ -182,6 +221,13 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <FileText className="w-3.5 h-3.5" />
             <span>Отчет PDF</span>
+          </button>
+          <button
+            onClick={onExcelImportClick}
+            className="flex items-center gap-1.5 py-1 px-3 rounded-lg font-bold text-emerald-600 dark:text-emerald-400"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5" />
+            <span>Excel</span>
           </button>
         </div>
 
