@@ -21,6 +21,7 @@ interface DiaryTableProps {
   onAddClick: () => void;
   onEditClick: (entry: DiaryEntry) => void;
   onDeleteClick: (id: string) => void;
+  onDeleteDayClick?: (date: string, count: number) => void;
 }
 
 export const DiaryTable: React.FC<DiaryTableProps> = ({
@@ -28,6 +29,7 @@ export const DiaryTable: React.FC<DiaryTableProps> = ({
   onAddClick,
   onEditClick,
   onDeleteClick,
+  onDeleteDayClick,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [periodFilter, setPeriodFilter] = useState<'all' | '7d' | '14d' | '30d' | 'today'>('all');
@@ -230,6 +232,21 @@ export const DiaryTable: React.FC<DiaryTableProps> = ({
                         <Utensils className="w-3.5 h-3.5" />
                         <span>{summary.totalXE} ХЕ ({summary.totalCarbs} г)</span>
                       </div>
+                    )}
+
+                    {/* Кнопка удаления целого дня */}
+                    {onDeleteDayClick && (
+                      <button
+                        onClick={() => onDeleteDayClick(date, summary.entriesCount)}
+                        className="flex items-center gap-1 px-2.5 py-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition cursor-pointer ml-auto"
+                        title={`Удалить все записи за ${formatDateRussian(date)}`}
+                        aria-label="Удалить весь день"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span className="text-[11px] font-semibold text-rose-600/80 hover:text-rose-600">
+                          Удалить день
+                        </span>
+                      </button>
                     )}
                   </div>
                 </div>

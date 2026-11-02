@@ -17,6 +17,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { AuthScreen } from './components/AuthScreen';
 import { ExcelImportModal } from './components/ExcelImportModal';
 import { PrivacyPolicyModal } from './components/PrivacyPolicyModal';
+import { ConfirmDeleteDayModal } from './components/ConfirmDeleteDayModal';
 import { CookieBanner } from './components/CookieBanner';
 import { Footer } from './components/Footer';
 import { api, AuthUser } from './api/client';
@@ -41,6 +42,23 @@ export default function App() {
   const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
   const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState(false);
   const [privacyModalTab, setPrivacyModalTab] = useState<'policy' | 'medical'>('policy');
+  const [dayToDelete, setDayToDelete] = useState<{ date: string; count: number } | null>(null);
+
+  const handleDeleteDayClick = (date: string, count: number) => {
+    setDayToDelete({ date, count });
+  };
+
+  const handleConfirmDeleteDay = async () => {
+    if (!dayToDelete) return;
+    const targetDate = dayToDelete.date;
+    setEntries((prev) => prev.filter((e) => e.date !== targetDate));
+    setDayToDelete(null);
+    try {
+      await api.deleteDay(targetDate);
+    } catch (err) {
+      console.error('Ошибка удаления дня на сервере:', err);
+    }
+  };
 
   const handleOpenPolicy = (tab: 'policy' | 'medical' = 'policy') => {
     setPrivacyModalTab(tab);
@@ -343,6 +361,7 @@ export default function App() {
                     }}
                     onEditClick={handleEditEntry}
                     onDeleteClick={handleDeleteEntry}
+                    onDeleteDayClick={handleDeleteDayClick}
                   />
                 </div>
                 <div className="md:hidden">
@@ -355,6 +374,7 @@ export default function App() {
                       }}
                       onEditClick={handleEditEntry}
                       onDeleteClick={handleDeleteEntry}
+                      onDeleteDayClick={handleDeleteDayClick}
                     />
                   ) : (
                     <DiaryTable
@@ -365,6 +385,7 @@ export default function App() {
                       }}
                       onEditClick={handleEditEntry}
                       onDeleteClick={handleDeleteEntry}
+                      onDeleteDayClick={handleDeleteDayClick}
                     />
                   )}
                 </div>
@@ -432,6 +453,15 @@ export default function App() {
         onClose={() => setIsExcelModalOpen(false)}
         onImport={handleExcelImport}
         xeRatio={settings.xeRatio}
+      />
+
+      {/* Модальное окно подтверждения удаления целого дня */}
+      <ConfirmDeleteDayModal
+        isOpen={!!dayToDelete}
+        onClose={() => setDayToDelete(null)}
+        onConfirm={handleConfirmDeleteDay}
+        date={dayToDelete?.date || ''}
+        count={dayToDelete?.count || 0}
       />
 
       {/* Модальное окно правовой информации и политики 152-ФЗ */}

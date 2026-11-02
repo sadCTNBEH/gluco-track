@@ -117,6 +117,12 @@ export const api = {
     });
   },
 
+  async deleteDay(date: string): Promise<void> {
+    await request(`/api/entries/day/${date}`, {
+      method: 'DELETE',
+    });
+  },
+
   async clearEntries(): Promise<void> {
     await request('/api/entries', {
       method: 'DELETE',

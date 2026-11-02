@@ -17,6 +17,7 @@ interface MobileCardViewProps {
   onAddClick: () => void;
   onEditClick: (entry: DiaryEntry) => void;
   onDeleteClick: (id: string) => void;
+  onDeleteDayClick?: (date: string, count: number) => void;
 }
 
 export const MobileCardView: React.FC<MobileCardViewProps> = ({
@@ -24,6 +25,7 @@ export const MobileCardView: React.FC<MobileCardViewProps> = ({
   onAddClick,
   onEditClick,
   onDeleteClick,
+  onDeleteDayClick,
 }) => {
   const groupedDays = groupEntriesByDay(entries);
 
@@ -57,9 +59,21 @@ export const MobileCardView: React.FC<MobileCardViewProps> = ({
                     {formatDateRussian(date, false)}
                   </span>
                 </div>
-                <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                  {summary.entriesCount} зап.
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                    {summary.entriesCount} зап.
+                  </span>
+                  {onDeleteDayClick && (
+                    <button
+                      onClick={() => onDeleteDayClick(date, summary.entriesCount)}
+                      className="p-1 text-slate-400 hover:text-rose-600 rounded-lg transition cursor-pointer"
+                      title="Удалить весь день"
+                      aria-label="Удалить все записи за этот день"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Мини-сводка за сутки */}

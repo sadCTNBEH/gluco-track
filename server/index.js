@@ -287,6 +287,18 @@ app.delete('/api/entries/:id', authMiddleware, (req, res) => {
   }
 });
 
+// Удалить все записи за конкретную дату (целый день)
+app.delete('/api/entries/day/:date', authMiddleware, (req, res) => {
+  try {
+    const { date } = req.params;
+    const result = db.prepare('DELETE FROM entries WHERE user_id = ? AND date = ?').run(req.user.id, date);
+    res.json({ ok: true, deletedCount: result.changes });
+  } catch (err) {
+    console.error('Delete day error:', err);
+    res.status(500).json({ error: 'Ошибка удаления записей за день' });
+  }
+});
+
 // Очистить все записи
 app.delete('/api/entries', authMiddleware, (req, res) => {
   try {
