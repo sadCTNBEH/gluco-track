@@ -1,0 +1,18 @@
+services:
+  glucotrack:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: glucotrack-app
+    restart: unless-stopped
+    ports:
+      # Проброс на локальный порт хоста 4999 (для проксирования через хостовой Nginx)
+      - "127.0.0.1:4999:4999"
+    environment:
+      - NODE_ENV=production
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:4999/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
